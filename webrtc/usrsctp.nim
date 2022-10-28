@@ -1,22 +1,17 @@
-import os
-import strformat
+import strformat, os
 
 # Socket definitions
 import nativesockets
 
-when defined(windows):
-  {.passl: "-lws2_32".}
-
-# C include directories
+# C include directory
 const root = currentSourcePath.parentDir
-const sourceInclude = root/"sources"/"lib"/"includes"
-const buildInclude = root/"build"/"lib"/"includes"
+const usrsctpInclude = root/"usrsctp"/"usrsctplib"
 
-{.passc: fmt"-I{sourceInclude} -I{buildInclude}".}
+{.passc: fmt"-I{usrsctpInclude}".}
 
-# Generated @ 2022-10-27T10:36:30+02:00
+# Generated @ 2022-10-28T14:25:24+02:00
 # Command line:
-#   /home/lchenut/.nimble/pkgs/nimterop-0.6.13/nimterop/toast --compile=./usrsctp/usrsctplib/netinet/sctp_input.c --compile=./usrsctp/usrsctplib/netinet/sctp_asconf.c --compile=./usrsctp/usrsctplib/netinet/sctp_pcb.c --compile=./usrsctp/usrsctplib/netinet/sctp_usrreq.c --compile=./usrsctp/usrsctplib/netinet/sctp_cc_functions.c --compile=./usrsctp/usrsctplib/netinet/sctp_auth.c --compile=./usrsctp/usrsctplib/netinet/sctp_userspace.c --compile=./usrsctp/usrsctplib/netinet/sctp_output.c --compile=./usrsctp/usrsctplib/netinet/sctp_callout.c --compile=./usrsctp/usrsctplib/netinet/sctp_crc32.c --compile=./usrsctp/usrsctplib/netinet/sctp_sysctl.c --compile=./usrsctp/usrsctplib/netinet/sctp_sha1.c --compile=./usrsctp/usrsctplib/netinet/sctp_timer.c --compile=./usrsctp/usrsctplib/netinet/sctputil.c --compile=./usrsctp/usrsctplib/netinet/sctp_bsd_addr.c --compile=./usrsctp/usrsctplib/netinet/sctp_peeloff.c --compile=./usrsctp/usrsctplib/netinet/sctp_indata.c --compile=./usrsctp/usrsctplib/netinet/sctp_ss_functions.c --compile=./usrsctp/usrsctplib/user_socket.c --compile=./usrsctp/usrsctplib/netinet6/sctp6_usrreq.c --compile=./usrsctp/usrsctplib/user_mbuf.c --compile=./usrsctp/usrsctplib/user_environment.c --compile=./usrsctp/usrsctplib/user_recv_thread.c --pnim --preprocess --noHeader --defines=NGTCP2_STATICLIB --replace=sockaddr=SockAddr --replace=SockAddr_storage=Sockaddr_storage --replace=socklen_t=SockLen --includeDirs=./usrsctp/usrsctplib ./usrsctp/usrsctplib/usrsctp.h
+#   /home/lchenut/.nimble/pkgs/nimterop-0.6.13/nimterop/toast --compile=./usrsctp/usrsctplib/netinet/sctp_input.c --compile=./usrsctp/usrsctplib/netinet/sctp_asconf.c --compile=./usrsctp/usrsctplib/netinet/sctp_pcb.c --compile=./usrsctp/usrsctplib/netinet/sctp_usrreq.c --compile=./usrsctp/usrsctplib/netinet/sctp_cc_functions.c --compile=./usrsctp/usrsctplib/netinet/sctp_auth.c --compile=./usrsctp/usrsctplib/netinet/sctp_userspace.c --compile=./usrsctp/usrsctplib/netinet/sctp_output.c --compile=./usrsctp/usrsctplib/netinet/sctp_callout.c --compile=./usrsctp/usrsctplib/netinet/sctp_crc32.c --compile=./usrsctp/usrsctplib/netinet/sctp_sysctl.c --compile=./usrsctp/usrsctplib/netinet/sctp_sha1.c --compile=./usrsctp/usrsctplib/netinet/sctp_timer.c --compile=./usrsctp/usrsctplib/netinet/sctputil.c --compile=./usrsctp/usrsctplib/netinet/sctp_bsd_addr.c --compile=./usrsctp/usrsctplib/netinet/sctp_peeloff.c --compile=./usrsctp/usrsctplib/netinet/sctp_indata.c --compile=./usrsctp/usrsctplib/netinet/sctp_ss_functions.c --compile=./usrsctp/usrsctplib/user_socket.c --compile=./usrsctp/usrsctplib/netinet6/sctp6_usrreq.c --compile=./usrsctp/usrsctplib/user_mbuf.c --compile=./usrsctp/usrsctplib/user_environment.c --compile=./usrsctp/usrsctplib/user_recv_thread.c --pnim --preprocess --noHeader --defines=SCTP_PROCESS_LEVEL_LOCKS --defines=SCTP_SIMPLE_ALLOCATOR --defines=__Userspace__ --replace=sockaddr=SockAddr --replace=SockAddr_storage=Sockaddr_storage --replace=SockAddr_in=Sockaddr_in --replace=SockAddr_conn=Sockaddr_conn --replace=socklen_t=SockLen --includeDirs=./usrsctp/usrsctplib ./usrsctp/usrsctplib/usrsctp.h
 
 # const 'SCTP_PACKED' has unsupported value '__attribute__((packed))'
 # const 'SCTP_INACTIVE' has unsupported value '0x0002 /* neither SCTP_ADDR_REACHABLE'
@@ -25,8 +20,10 @@ const buildInclude = root/"build"/"lib"/"includes"
 
 
 {.experimental: "codeReordering".}
-{.passC: "-DNGTCP2_STATICLIB".}
-{.passC: "-I./usrsctp/usrsctplib".}
+{.passc: "-DSCTP_PROCESS_LEVEL_LOCKS".}
+{.passc: "-DSCTP_SIMPLE_ALLOCATOR".}
+{.passc: "-D__Userspace__".}
+{.passc: "-I./usrsctp/usrsctplib".}
 {.compile: "./usrsctp/usrsctplib/netinet/sctp_input.c".}
 {.compile: "./usrsctp/usrsctplib/netinet/sctp_asconf.c".}
 {.compile: "./usrsctp/usrsctplib/netinet/sctp_pcb.c".}
@@ -280,15 +277,15 @@ type
     verification_tag*: uint32
     crc32c*: uint32
 
-  SockAddr_conn* {.bycopy.} = object
+  Sockaddr_conn* {.bycopy.} = object
     sconn_family*: uint16
     sconn_port*: uint16
     sconn_addr*: pointer
 
   sctp_sockstore* {.union, bycopy.} = object
-    sin*: SockAddr_in
-    sin6*: SockAddr_in6
-    sconn*: SockAddr_conn
+    sin*: Sockaddr_in
+    sin6*: Sockaddr_in6
+    sconn*: Sockaddr_conn
     sa*: SockAddr
 
   sctp_rcvinfo* {.bycopy.} = object

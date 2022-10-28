@@ -1,15 +1,11 @@
-import os
-import strformat
+import strformat, os
 
 # Socket definitions
 import nativesockets
 
-when defined(windows):
-  {.passl: "-lws2_32".}
-
-# C include directories
+# C include directory
 const root = currentSourcePath.parentDir
-const sourceInclude = root/"sources"/"lib"/"includes"
-const buildInclude = root/"build"/"lib"/"includes"
+const usrsctpInclude = root/"usrsctp"/"usrsctplib"
 
-{.passc: fmt"-I{sourceInclude} -I{buildInclude}".}
+{.passc: fmt"-I{usrsctpInclude}".}
+
