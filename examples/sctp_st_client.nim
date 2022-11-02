@@ -1,6 +1,6 @@
-import sequtils, bitops
+import bitops
 import chronos, posix
-import usrsctp
+import ../webrtc/usrsctp
 import stew/ranges/ptr_arith
 
 const IPPROTO_SCTP = 132
