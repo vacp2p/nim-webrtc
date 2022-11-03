@@ -7,8 +7,6 @@ const IPPROTO_SCTP = 132
 let ta = initTAddress("127.0.0.1:4244")
 let tar = initTAddress("127.0.0.1:4242")
 
-proc discardFunc(transp: DatagramTransport, raddr: TransportAddress): Future[void] {.async.} = discard
-
 proc connOutput(address: pointer,
                 buffer: pointer,
                 length: uint,

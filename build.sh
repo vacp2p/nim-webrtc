@@ -18,6 +18,9 @@ for file in `find ${root}/usrsctp/usrsctplib -name '*.c'`; do
   compile="${compile} --compile=${file}"
 done
 
+# TODO: Make something more reliable, aka remove this LIBCFLAGS
+# and put the different flags on prelude.nim depending on the
+# OS we're currently on
 LIBCFLAGS="$(grep "^LIBCFLAGS = " "${root}/usrsctp/Makefile" | cut -d' ' -f3- | sed 's/-D/--defines=/g')"
 
 # generate nim wrapper with nimterop
