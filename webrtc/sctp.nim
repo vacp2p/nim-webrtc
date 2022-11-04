@@ -37,6 +37,8 @@ type
 const
   IPPROTO_SCTP = 132
 
+proc perror(error: cstring) {.importc, cdecl, header: "<errno.h>".}
+
 proc new(T: typedesc[SctpConnection],
          sctp: Sctp,
          udp: DatagramTransport,
@@ -44,14 +46,14 @@ proc new(T: typedesc[SctpConnection],
          sctpSocket: ptr socket): T =
   T(sctp: sctp, udp: udp, address: address, sctpSocket: sctpSocket)
 
-proc read(self: SctpConnection): Future[seq[byte]] = discard
+proc read*(self: SctpConnection): Future[seq[byte]] = discard
 
-proc write(self: SctpConnection, buf: seq[byte]) {.async.} =
+proc write*(self: SctpConnection, buf: seq[byte]) {.async.} =
   self.sctp.sentConnection = self
   discard self.sctpSocket.usrsctp_sendv(addr buf, buf.len.uint, nil, 0, nil, 0, SCTP_SENDV_NOINFO, 0)
   await self.sctp.sentFuture
 
-proc close(self: SctpConnection) {.async.} = discard
+proc close*(self: SctpConnection) {.async.} = discard
 
 proc handleUpcall(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
   let e = usrsctp_get_events(sock)
@@ -78,6 +80,7 @@ proc handleAccept(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
   sin.fromSockAddr(sizeof(sin).SockLen, ipaddress, port)
   let address = initTAddress(ipaddress, port)
   sctp.connections[address] = SctpConnection.new(sctp, sctp.udp, address, sctpSocket)
+  sctp.gotConnection.fire()
 
 proc getOrCreateConnection(self: Sctp,
                            udp: DatagramTransport,
@@ -95,8 +98,12 @@ proc getOrCreateConnection(self: Sctp,
                                    sizeof(on).SockLen)
   doAssert 0 == usrsctp_set_non_blocking(conn.sctpSocket, 1)
   doAssert 0 == usrsctp_set_upcall(conn.sctpSocket, handleUpcall, nil)
+  var sconn: Sockaddr_conn
+  sconn.sconn_family = AF_CONN
+  sconn.sconn_port = htons(5000)
+  sconn.sconn_addr = nil
+  doAssert 0 == conn.sctpSocket.usrsctp_connect(cast[ptr SockAddr](addr sconn), SockLen(sizeof(sconn)))
   self.connections[address] = conn
-  self.gotConnection.fire()
   return conn
 
 proc sendCallback(address: pointer,
@@ -114,7 +121,7 @@ proc sendCallback(address: pointer,
       echo "Failure: ", exc.msg
   sctp.sentFuture = testSend()
 
-proc new(T: typedesc[Sctp], port: uint16 = 9899, isServer: bool = true): T =
+proc new*(T: typedesc[Sctp], port: uint16 = 9899, isServer: bool = false): T =
   let
     sctp = T(gotConnection: newAsyncEvent())
     sctpPtr = cast[pointer](addr sctp)
@@ -128,25 +135,35 @@ proc new(T: typedesc[Sctp], port: uint16 = 9899, isServer: bool = true): T =
     localAddr = TransportAddress(family: AddressFamily.IPv4, port: Port(port))
     udp = newDatagramTransport(onReceive, local = localAddr)
   usrsctp_init_nothreads(port, sendCallback, nil) # TODO maybe put a debugger instead of nil
+  discard usrsctp_sysctl_set_sctp_ecn_enable(1)
   usrsctp_register_address(sctpPtr)
   sctp.udp = udp
   if isServer:
+    echo errno, " <="
     let sock = usrsctp_socket(AF_INET, posix.SOCK_STREAM, IPPROTO_SCTP, nil, nil, 0, nil)
-    sock.usrsctp_set_upcall(handleAccept, sctpPtr)
+    perror("usrsctp_socket")
+    var on: int = 1
+    echo "=> ", errno
+    doAssert 0 == usrsctp_setsockopt(sock, IPPROTO_SCTP, SCTP_RECVRCVINFO, addr on, SockLen(sizeof(on)))
+    doAssert 0 == usrsctp_set_non_blocking(sock, 1)
+    echo sock.usrsctp_set_upcall(handleAccept, sctpPtr)
+    echo errno
     var sconn: Sockaddr_conn
     sconn.sconn_family = AF_CONN
-    sconn.sconn_port = htons(0)
+    sconn.sconn_port = htons(5000)
     sconn.sconn_addr = nil
-    doAssert 0 == usrsctp_bind(sock, cast[ptr SockAddr](addr sconn), sizeof(sconn).SockLen)
+    echo usrsctp_bind(sock, cast[ptr SockAddr](addr sconn), SockLen(sizeof(sconn)))
     doAssert 0 < usrsctp_listen(sock, 1)
+    sctp.sock = sock
   return sctp
 
-proc listen(self: Sctp, address: TransportAddress): Future[SctpConnection] {.async.} =
+proc listen*(self: Sctp, address: TransportAddress): Future[SctpConnection] {.async.} =
   while true:
     if self.connections.hasKey(address):
       return self.connections[address]
     self.gotConnection.clear()
     await self.gotConnection.wait()
 
-proc connect(self: Sctp): Future[SctpConnection] = discard
-proc dial(self: Sctp, address: TransportAddress): Future[SctpConnection] = discard
+proc connect*(self: Sctp, address: TransportAddress): Future[SctpConnection] {.async.} =
+  let conn = self.getOrCreateConnection(self.udp, address)
+  return conn
