@@ -22,6 +22,7 @@ done
 # and put the different flags on prelude.nim depending on the
 # OS we're currently on
 LIBCFLAGS="$(grep "^LIBCFLAGS = " "${root}/usrsctp/Makefile" | cut -d' ' -f3- | sed 's/-D/--defines=/g')"
+LIBCFLAGS="${LIBCFLAGS} --defines=SCTP_DEBUG --defines=HAVE_INET_ADDR=1 --defines=INET=1"
 
 # generate nim wrapper with nimterop
 toast \

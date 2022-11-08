@@ -9,9 +9,9 @@ const usrsctpInclude = root/"usrsctp"/"usrsctplib"
 
 {.passc: fmt"-I{usrsctpInclude}".}
 
-# Generated @ 2022-10-28T14:25:24+02:00
+# Generated @ 2022-11-07T15:34:50+01:00
 # Command line:
-#   /home/lchenut/.nimble/pkgs/nimterop-0.6.13/nimterop/toast --compile=./usrsctp/usrsctplib/netinet/sctp_input.c --compile=./usrsctp/usrsctplib/netinet/sctp_asconf.c --compile=./usrsctp/usrsctplib/netinet/sctp_pcb.c --compile=./usrsctp/usrsctplib/netinet/sctp_usrreq.c --compile=./usrsctp/usrsctplib/netinet/sctp_cc_functions.c --compile=./usrsctp/usrsctplib/netinet/sctp_auth.c --compile=./usrsctp/usrsctplib/netinet/sctp_userspace.c --compile=./usrsctp/usrsctplib/netinet/sctp_output.c --compile=./usrsctp/usrsctplib/netinet/sctp_callout.c --compile=./usrsctp/usrsctplib/netinet/sctp_crc32.c --compile=./usrsctp/usrsctplib/netinet/sctp_sysctl.c --compile=./usrsctp/usrsctplib/netinet/sctp_sha1.c --compile=./usrsctp/usrsctplib/netinet/sctp_timer.c --compile=./usrsctp/usrsctplib/netinet/sctputil.c --compile=./usrsctp/usrsctplib/netinet/sctp_bsd_addr.c --compile=./usrsctp/usrsctplib/netinet/sctp_peeloff.c --compile=./usrsctp/usrsctplib/netinet/sctp_indata.c --compile=./usrsctp/usrsctplib/netinet/sctp_ss_functions.c --compile=./usrsctp/usrsctplib/user_socket.c --compile=./usrsctp/usrsctplib/netinet6/sctp6_usrreq.c --compile=./usrsctp/usrsctplib/user_mbuf.c --compile=./usrsctp/usrsctplib/user_environment.c --compile=./usrsctp/usrsctplib/user_recv_thread.c --pnim --preprocess --noHeader --defines=SCTP_PROCESS_LEVEL_LOCKS --defines=SCTP_SIMPLE_ALLOCATOR --defines=__Userspace__ --replace=sockaddr=SockAddr --replace=SockAddr_storage=Sockaddr_storage --replace=SockAddr_in=Sockaddr_in --replace=SockAddr_conn=Sockaddr_conn --replace=socklen_t=SockLen --includeDirs=./usrsctp/usrsctplib ./usrsctp/usrsctplib/usrsctp.h
+#   /home/lchenut/.nimble/pkgs/nimterop-0.6.13/nimterop/toast --compile=./usrsctp/usrsctplib/netinet/sctp_input.c --compile=./usrsctp/usrsctplib/netinet/sctp_asconf.c --compile=./usrsctp/usrsctplib/netinet/sctp_pcb.c --compile=./usrsctp/usrsctplib/netinet/sctp_usrreq.c --compile=./usrsctp/usrsctplib/netinet/sctp_cc_functions.c --compile=./usrsctp/usrsctplib/netinet/sctp_auth.c --compile=./usrsctp/usrsctplib/netinet/sctp_userspace.c --compile=./usrsctp/usrsctplib/netinet/sctp_output.c --compile=./usrsctp/usrsctplib/netinet/sctp_callout.c --compile=./usrsctp/usrsctplib/netinet/sctp_crc32.c --compile=./usrsctp/usrsctplib/netinet/sctp_sysctl.c --compile=./usrsctp/usrsctplib/netinet/sctp_sha1.c --compile=./usrsctp/usrsctplib/netinet/sctp_timer.c --compile=./usrsctp/usrsctplib/netinet/sctputil.c --compile=./usrsctp/usrsctplib/netinet/sctp_bsd_addr.c --compile=./usrsctp/usrsctplib/netinet/sctp_peeloff.c --compile=./usrsctp/usrsctplib/netinet/sctp_indata.c --compile=./usrsctp/usrsctplib/netinet/sctp_ss_functions.c --compile=./usrsctp/usrsctplib/user_socket.c --compile=./usrsctp/usrsctplib/netinet6/sctp6_usrreq.c --compile=./usrsctp/usrsctplib/user_mbuf.c --compile=./usrsctp/usrsctplib/user_environment.c --compile=./usrsctp/usrsctplib/user_recv_thread.c --pnim --preprocess --noHeader --defines=SCTP_PROCESS_LEVEL_LOCKS --defines=SCTP_SIMPLE_ALLOCATOR --defines=__Userspace__ --defines=SCTP_DEBUG --defines=HAVE_INET_ADDR=1 --defines=INET=1 --replace=sockaddr=SockAddr --replace=SockAddr_storage=Sockaddr_storage --replace=SockAddr_in=Sockaddr_in --replace=SockAddr_conn=Sockaddr_conn --replace=socklen_t=SockLen --includeDirs=./usrsctp/usrsctplib ./usrsctp/usrsctplib/usrsctp.h
 
 # const 'SCTP_PACKED' has unsupported value '__attribute__((packed))'
 # const 'SCTP_INACTIVE' has unsupported value '0x0002 /* neither SCTP_ADDR_REACHABLE'
@@ -23,6 +23,9 @@ const usrsctpInclude = root/"usrsctp"/"usrsctplib"
 {.passc: "-DSCTP_PROCESS_LEVEL_LOCKS".}
 {.passc: "-DSCTP_SIMPLE_ALLOCATOR".}
 {.passc: "-D__Userspace__".}
+{.passc: "-DSCTP_DEBUG".}
+{.passc: "-DHAVE_INET_ADDR=1".}
+{.passc: "-DINET=1".}
 {.passc: "-I./usrsctp/usrsctplib".}
 {.compile: "./usrsctp/usrsctplib/netinet/sctp_input.c".}
 {.compile: "./usrsctp/usrsctplib/netinet/sctp_asconf.c".}
@@ -269,6 +272,8 @@ const
   SCTP_BINDX_REM_ADDR* = 0x00008002
   SCTP_DUMP_OUTBOUND* = 1
   SCTP_DUMP_INBOUND* = 0
+  SCTP_DEBUG_NONE* = 0x00000000
+  SCTP_DEBUG_ALL* = 0xFFFFFFFF
 type
   sctp_assoc_t* = uint32
   sctp_common_header* {.bycopy.} = object
@@ -1291,5 +1296,11 @@ proc usrsctp_sysctl_set_sctp_buffer_splitting*(value: uint32): cint {.importc,
 proc usrsctp_sysctl_get_sctp_buffer_splitting*(): uint32 {.importc, cdecl.}
 proc usrsctp_sysctl_set_sctp_initial_cwnd*(value: uint32): cint {.importc, cdecl.}
 proc usrsctp_sysctl_get_sctp_initial_cwnd*(): uint32 {.importc, cdecl.}
+proc usrsctp_sysctl_set_sctp_debug_on*(value: uint32): cint {.importc, cdecl.}
+proc usrsctp_sysctl_get_sctp_debug_on*(): uint32 {.importc, cdecl.}
+  ## ```
+                                                                   ##   More specific values can be found in sctp_constants, but
+                                                                   ##    are not considered to be part of the API.
+                                                                   ## ```
 proc usrsctp_get_stat*(a1: ptr sctpstat) {.importc, cdecl.}
 {.pop.}
