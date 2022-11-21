@@ -3,9 +3,8 @@ import ../webrtc/sctp
 
 proc main() {.async.} =
   let
-    sctp = Sctp.new(isServer = true)
-    address = initTAddress("127.0.0.1:9899")
-    conn = await sctp.listen(address)
+    sctp = Sctp.new(port = 4242, isServer = true, sctpPort = 13)
+    conn = await sctp.listen()
   let msg = await conn.read()
   echo string.fromBytes(msg)
 

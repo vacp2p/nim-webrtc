@@ -3,6 +3,8 @@ import chronos, posix
 import ../webrtc/usrsctp
 import stew/ranges/ptr_arith
 
+proc printf(format: cstring) {.cdecl, varargs.} = echo "printf"
+proc perror(error: cstring) {.importc, cdecl, header: "<errno.h>".}
 const IPPROTO_SCTP = 132
 let ta = initTAddress("127.0.0.1:4244")
 let tar = initTAddress("127.0.0.1:4242")
@@ -38,8 +40,6 @@ proc handleUpcall(sock: ptr socket, arg: pointer, length: cint) {.cdecl.} =
   else:
     echo "/!\\ ERROR /!\\"
 
-proc printf(format: cstring) {.cdecl, varargs.} = echo "printf"
-
 proc handleEvents(dg: DatagramTransport, sock: ptr socket, sconn_addr: pointer) {.async.} =
   await sleepAsync(3.seconds)
 
@@ -56,7 +56,7 @@ proc main {.async, gcsafe.} =
   usrsctp_init_nothreads(0, connOutput, printf)
   discard usrsctp_sysctl_set_sctp_ecn_enable(1)
   usrsctp_register_address(p)
-  let sock = usrsctp_socket(AF_INET, posix.SOCK_STREAM, IPPROTO_SCTP, nil, nil, 0, nil)
+  let sock = usrsctp_socket(AF_CONN, posix.SOCK_STREAM, IPPROTO_SCTP, nil, nil, 0, nil)
   var on: int = 1
   doAssert 0 == usrsctp_setsockopt(sock, IPPROTO_SCTP, SCTP_RECVRCVINFO, addr on, sizeof(on).SockLen)
   doAssert 0 == usrsctp_set_non_blocking(sock, 1)
@@ -70,6 +70,7 @@ proc main {.async, gcsafe.} =
   sconn.sconn_port = htons(13)
   sconn.sconn_addr = p
   let connErr = usrsctp_connect(sock, cast[ptr SockAddr](addr sconn), sizeof(sconn).SockLen)
+  perror("usrsctp_connect")
   doAssert 0 == connErr or errno == EINPROGRESS, ($errno)
 
   await handleEvents(dg, sock, sconn.sconn_addr)
