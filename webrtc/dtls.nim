@@ -22,6 +22,7 @@ const
   BIO_NOCLOSE = 0x0
   #BIO_CLOSE   = 0x1
   BIO_CTRL_DGRAM_SET_CONNECTED = 32
+  DTLS_CTRL_GET_TIMEOUT = 73
   BIO_C_SET_FD = 104
 
 proc DTLS_client_method(): PSSL_METHOD {.cdecl, dynlib: DLLSSLName, importc.}
@@ -40,6 +41,18 @@ type
     ctxIsView: bool
     ssl: SslPtr
 
+proc waitForData(socket: DtlsSocket) {.async.} =
+  socket.gotData.clear()
+  var timeout: Timeval
+  if (SSL_ctrl(socket.ssl, DTLS_CTRL_GET_TIMEOUT, 0, addr timeout) == 1):
+    let
+      momentTimeout = seconds(clong(timeout.tv_sec)) + nanoseconds(timeout.tv_usec)
+      fut = socket.gotData.wait()
+    if not await fut.withTimeout(momentTimeout):
+      fut.cancel
+  else:
+    await socket.gotData.wait()
+
 template wrapSslCallRes(dtlsSocket, call: untyped): untyped =
   block:
     var err: type(call)
@@ -47,20 +60,17 @@ template wrapSslCallRes(dtlsSocket, call: untyped): untyped =
       err = call
       if err <= 0:
         let openSslErr = SSL_get_error(dtlsSocket.ssl, cint(err))
-        if openSslErr == SSL_ERROR_WANT_READ:
-          dtlsSocket.gotData.clear()
-          #TODO timeouts?
-          await dtlsSocket.gotData.wait()#.withTimeout(1.seconds)
+        if openSslErr in [SSL_ERROR_WANT_READ, SSL_ERROR_WANT_WRITE]:
+          await dtlsSocket.waitForData()
           continue
         elif openSslErr == SSL_ERROR_SYSCALL:
           let err = osLastError()
           if cint(err) == EAGAIN:
-            dtlsSocket.gotData.clear()
-            await dtlsSocket.gotData.wait()#.withTimeout(1.seconds)
+            await dtlsSocket.waitForData()
             continue
           raiseTransportOsError(err)
-        echo ERR_error_string(culong(ERR_peek_last_error()), nil)
-        raise ValueError.newException("openssl error" & $openSslErr)
+        let errorMsg = ERR_error_string(culong(ERR_peek_last_error()), nil)
+        raise ValueError.newException("openssl error: " & $errorMsg)
       break
     err
 
