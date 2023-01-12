@@ -10,7 +10,7 @@
 import std/[openssl, os]
 import posix
 import chronos, chronicles
-import stew/byteutils
+import stew/[byteutils, ptrops]
 
 export chronicles
 
@@ -22,15 +22,18 @@ const
   BIO_NOCLOSE = 0x0
   #BIO_CLOSE   = 0x1
   BIO_CTRL_DGRAM_SET_CONNECTED = 32
+  BIO_CTRL_DGRAM_GET_PEER = 46
   DTLS_CTRL_GET_TIMEOUT = 73
   BIO_C_SET_FD = 104
 
 proc DTLS_client_method(): PSSL_METHOD {.cdecl, dynlib: DLLSSLName, importc.}
 proc DTLS_server_method(): PSSL_METHOD {.cdecl, dynlib: DLLSSLName, importc.}
 proc BIO_new_dgram(fd: SocketHandle, closeFlag: int): BIO {.cdecl, dynlib: DLLUtilName, importc.}
+proc SSL_get_rbio(ssl: SslPtr): BIO {.cdecl, dynlib: DLLSSLName, importc.}
+proc RAND_bytes(buf: pointer, length: int): int {.cdecl, dynlib: DLLSSLName, importc.}
 proc DTLSv1_listen(ssl: SslPtr, peer: ptr): int {.cdecl, dynlib: DLLSSLName, importc.}
 proc SSL_CTX_set_cookie_generate_cb(ctx: SslCtx, cb: proc (ssl: SslPtr, cookie: ptr byte, cookieLen: ptr int): int {.cdecl.}) {.cdecl, dynlib: DLLSSLName, importc.}
-proc SSL_CTX_set_cookie_verify_cb(ctx: SslCtx, cb: proc (ssl: SslPtr, cookie: ptr byte, cookieLen: ptr int): int {.cdecl.}) {.cdecl, dynlib: DLLSSLName, importc.}
+proc SSL_CTX_set_cookie_verify_cb(ctx: SslCtx, cb: proc (ssl: SslPtr, cookie: ptr byte, cookieLen: int): int {.cdecl.}) {.cdecl, dynlib: DLLSSLName, importc.}
 # --- openssl
 
 type
@@ -77,14 +80,56 @@ template wrapSslCallRes(dtlsSocket, call: untyped): untyped =
 template wrapSslCall(dtlsSocket, call: untyped) =
   discard wrapSslCallRes(dtlsSocket, call)
 
-proc generateSslCookie(ssl: SslPtr, cookie: ptr byte, cookieLen: ptr int): int {.cdecl.} =
-  #TODO
-  cookieLen[] = 30
-  1
+proc fromSAddr(storeAddr: Sockaddr_storage): TransportAddress =
+  let size =
+    if int(storeAddr.ss_family) == ord(Domain.AF_INET):
+       sizeof(Sockaddr_in)
+    elif int(storeAddr.ss_family) == ord(Domain.AF_INET6):
+       sizeof(Sockaddr_in6)
+    elif int(storeAddr.ss_family) == ord(Domain.AF_UNIX):
+       sizeof(Sockaddr_storage)
+    else: -1
+  fromSAddr(addr storeAddr, SockLen(size), result)
 
-proc verifySslCookie(ssl: SslPtr, cookie: ptr byte, cookieLen: ptr int): int {.cdecl.} =
-  #TODO
-  1
+var cookieSecret: array[32, byte]
+doAssert RAND_bytes(addr cookieSecret[0], cookieSecret.len) > 0
+
+proc generateSslCookie(ssl: SslPtr, cookie: ptr byte, cookieLen: ptr int): int {.cdecl.} =
+  var peerSockaddr: Sockaddr_storage
+  if BIO_ctrl(SSL_get_rbio(ssl), BIO_CTRL_DGRAM_GET_PEER, 0, cast[cstring](addr peerSockaddr)) <= 0:
+    return 0
+
+  let transportAddress = fromSAddr(peerSockaddr)
+  if
+      HMAC(EVP_sha1(),
+      addr cookieSecret[0], cint(cookieSecret.len),
+      cast[cstring](addr transportAddress), csize_t(sizeof(TransportAddress)),
+      cast[cstring](cookie), cast[ptr cuint](cookieLen)) == nil:
+    0
+  else:
+    1
+
+proc verifySslCookie(ssl: SslPtr, cookie: ptr byte, cookieLen: int): int {.cdecl.} =
+  var peerSockaddr: Sockaddr_storage
+  if BIO_ctrl(SSL_get_rbio(ssl), BIO_CTRL_DGRAM_GET_PEER, 0, cast[cstring](addr peerSockaddr)) <= 0:
+    return 0
+
+  let transportAddress = fromSAddr(peerSockaddr)
+  var
+    buffer: array[1024, byte]
+    bufferLength: cuint
+  if
+      HMAC(EVP_sha1(),
+      addr cookieSecret[0], cint(cookieSecret.len),
+      cast[cstring](addr transportAddress), csize_t(sizeof(TransportAddress)),
+      cast[cstring](addr buffer[0]), addr bufferLength) == nil:
+    return 0
+
+  if bufferLength != cuint(cookieLen): return 0
+  if cookie.makeOpenArray(byte, cookieLen) == buffer[0 ..< bufferLength]:
+    1
+  else:
+    0
 
 proc createDtlsSocket(
   localAddress = AnyAddress,
@@ -128,22 +173,12 @@ proc accept*(sock: DtlsSocket): Future[DtlsSocket] {.async.} =
 
   sslSetBio(ssl, bio, bio)
 
-  var
-    clientSockAddr: Sockaddr_storage
-    clientAddr: TransportAddress
+  var clientSockAddr: Sockaddr_storage
   doAssert isNil(sock.ssl)
   sock.ssl = ssl
   wrapSslCall(sock, DTLSv1_listen(ssl, addr clientSockAddr))
   sock.ssl = nil
-  let size =
-    if int(clientSockAddr.ss_family) == ord(Domain.AF_INET):
-       sizeof(Sockaddr_in)
-    elif int(clientSockAddr.ss_family) == ord(Domain.AF_INET6):
-       sizeof(Sockaddr_in6)
-    elif int(clientSockAddr.ss_family) == ord(Domain.AF_UNIX):
-       sizeof(Sockaddr_storage)
-    else: doAssert(false); -1
-  fromSAddr(addr clientSockAddr, SockLen(size), clientAddr)
+  let clientAddr = fromSAddr(clientSockAddr)
 
   # create new socket
   result = createDtlsSocket(
