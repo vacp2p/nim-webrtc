@@ -7,4 +7,5 @@ license = "MIT"
 
 requires "nim >= 1.2.0",
          "chronicles >= 0.10.2",
-         "chronos >= 3.0.6"
+         "chronos >= 3.0.6",
+         "https://github.com/status-im/nim-binary-serialization.git"
