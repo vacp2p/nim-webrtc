@@ -1,6 +1,11 @@
 import bitops
-import chronos, chronicles
-import binary_serialization
+import chronos,
+       chronicles,
+       binary_serialization,
+       stew/objects
+import stunattributes
+
+export binary_serialization
 
 logScope:
   topics = "webrtc stun"
@@ -9,33 +14,17 @@ const
   msgHeaderSize = 20
   magicCookieSeq = @[ 0x21'u8, 0x12, 0xa4, 0x42 ]
   magicCookie = 0x2112a442
+  BindingRequest = 0x0001'u16
+  BindingResponse = 0x0101'u16
 
-type
-# Stun Attribute
-# 0                   1                   2                   3
-# 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-# +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-# |         Type                  |            Length             |
-# +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-# |                         Value (variable)                ....
-# +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-  StunAttribute* = object 
-    attributeType*: uint16
-    length* {.bin_value: it.value.len.}: uint16
-    value* {.bin_len: it.length.}: seq[byte]
-
-proc decode(T: typedesc[StunAttribute], cnt: seq[byte]): seq[StunAttribute] =
+proc decode(T: typedesc[RawStunAttribute], cnt: seq[byte]): seq[RawStunAttribute] =
   const val = @[0, 3, 2, 1]
   var padding = 0
   while padding < cnt.len():
-    let attr = Binary.decode(cnt[padding ..^ 1], StunAttribute)
+    let attr = Binary.decode(cnt[padding ..^ 1], RawStunAttribute)
     result.add(attr)
     padding += 4 + attr.value.len()
     padding += val[padding mod 4]
-
-proc seqAttrLen(s: seq[StunAttribute]): uint16 =
-  for it in s:
-    result = it.length + 4
 
 type
 #  Stun Header
@@ -50,32 +39,46 @@ type
 # |                     Transaction ID (96 bits)                  |
 # |                                                               |
 # +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-  StunMessageInner = object
+# Message type:
+#   0x0001: Binding Request
+#   0x0101: Binding Response
+#   0x0111: Binding Error Response
+#   0x0002: Shared Secret Request
+#   0x0102: Shared Secret Response
+#   0x0112: Shared Secret Error Response
+
+  RawStunMessage = object
     msgType: uint16
     length* {.bin_value: it.content.len().}: uint16
     magicCookie: uint32
     transactionId: array[12, byte]
     content* {.bin_len: it.length.}: seq[byte]
-  
+
   StunMessage* = object
     msgType*: uint16
     transactionId*: array[12, byte]
-    attributes*: seq[StunAttribute]
+    attributes*: seq[RawStunAttribute]
 
   Stun* = object
 
+proc getAttribute(attrs: seq[RawStunAttribute], typ: uint16): Option[seq[byte]] =
+  for attr in attrs:
+    if attr.attributeType == typ:
+      return some(attr.value)
+  return none(seq[byte])
+
 proc isMessage*(T: typedesc[Stun], msg: seq[byte]): bool =
-  msg.len >= msgHeaderSize and msg[4..<8] == magicCookie and bitand(0xC0'u8, msg[0]) == 0'u8
+  msg.len >= msgHeaderSize and msg[4..<8] == magicCookieSeq and bitand(0xC0'u8, msg[0]) == 0'u8
 
 proc decode*(T: typedesc[StunMessage], msg: seq[byte]): StunMessage =
-  let smi = Binary.decode(msg, StunMessageInner)
+  let smi = Binary.decode(msg, RawStunMessage)
   return T(msgType: smi.msgType,
            transactionId: smi.transactionId,
-           attributes: StunAttribute.decode(smi.content))
+           attributes: RawStunAttribute.decode(smi.content))
 
 proc encode*(msg: StunMessage): seq[byte] =
   const val = @[0, 3, 2, 1]
-  var smi = StunMessageInner(msgType: msg.msgType,
+  var smi = RawStunMessage(msgType: msg.msgType,
                              magicCookie: magicCookie,
                              transactionId: msg.transactionId)
   for attr in msg.attributes:
@@ -83,6 +86,32 @@ proc encode*(msg: StunMessage): seq[byte] =
     smi.content.add(newSeq[byte](val[smi.content.len() mod 4]))
 
   return Binary.encode(smi)
+
+proc getResponse*(T: typedesc[Stun], msg: seq[byte],
+    address: TransportAddress): Option[StunMessage] =
+  let sm =
+    try:
+      StunMessage.decode(msg)
+    except CatchableError as exc:
+      return none(StunMessage)
+
+  if sm.msgType != BindingRequest:
+    return none(StunMessage)
+
+  var res = StunMessage(msgType: BindingResponse,
+                        transactionId: sm.transactionId)
+
+  var unknownAttr: seq[uint16]
+  for attr in sm.attributes:
+    let typ = attr.attributeType
+    if typ.isRequired() and typ notin StunAttributeEnum:
+      unknownAttr.add(typ)
+  if unknownAttr.len() > 0:
+    res.attributes.add(ErrorCode.encode(ECUnknownAttribute))
+    res.attributes.add(UnknownAttribute.encode(unknownAttr))
+    return some(res)
+
+  #if sm.attributes.getAttribute())
 
 proc new*(T: typedesc[Stun]): T =
   result = T()
