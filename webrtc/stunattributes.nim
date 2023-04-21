@@ -1,8 +1,11 @@
+import sequtils, typetraits
 import binary_serialization,
-       stew/byteutils
+       stew/byteutils,
+       chronos
 import utils
 
 type
+  StunAttributeEncodingError* = object of CatchableError
 # Stun Attribute
 # 0                   1                   2                   3
 # 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -100,12 +103,50 @@ proc encode*(T: typedesc[UnknownAttribute], unknownAttr: seq[uint16]): RawStunAt
                             length: value.len().uint16,
                             value: value)
 
+# Fingerprint
+
 type
   Fingerprint* = object
     crc32: uint32
 
 proc encode*(T: typedesc[Fingerprint], msg: seq[byte]): RawStunAttribute =
-  let value = Binary.encode(Fingerprint(crc32: crc32(msg) xor 0x5354554e'u32))
+  let value = Binary.encode(T(crc32: crc32(msg) xor 0x5354554e'u32))
   result = RawStunAttribute(attributeType: AttrFingerprint.uint16,
+                            length: value.len().uint16,
+                            value: value)
+
+# Xor Mapped Address
+
+type
+  MappedAddressFamily {.size: 1.} = enum
+    MAFIPv4 = 0x01
+    MAFIPv6 = 0x02
+
+  XorMappedAddress* = object
+    reserved: uint8 # should be 0
+    family: MappedAddressFamily
+    port: uint16
+    address: seq[byte]
+
+proc encode*(T: typedesc[XorMappedAddress], ta: TransportAddress,
+             tid: array[12, byte]): RawStunAttribute =
+  const magicCookie = @[ 0x21'u8, 0x12, 0xa4, 0x42 ]
+  let
+    address =
+      if ta.family == AddressFamily.IPv4:
+        var s = newSeq[uint8](4)
+        for i in 0..3:
+          s[i] = ta.address_v4[i] xor magicCookie[i]
+        s
+      else:
+        let magicCookieTid = magicCookie.concat(@tid)
+        var s = newSeq[uint8](16)
+        for i in 0..15:
+          s[i] = ta.address_v6[i] xor magicCookieTid[i]
+        s
+    xma = T(family: if ta.family == AddressFamily.IPv4: MAFIPv4 else: MAFIPv6,
+            port: ta.port.distinctBase xor 0x2112'u16, address: address)
+    value = Binary.encode(xma)
+  result = RawStunAttribute(attributeType: AttrXORMappedAddress.uint16,
                             length: value.len().uint16,
                             value: value)

@@ -49,6 +49,7 @@ type
 
   RawStunMessage = object
     msgType: uint16
+    # it.conten.len() + 8 Because the Fingerprint is added after the encoding
     length* {.bin_value: it.content.len() + 8.}: uint16
     magicCookie: uint32
     transactionId: array[12, byte]
@@ -89,7 +90,9 @@ proc encode*(msg: StunMessage): seq[byte] =
   result.add(Binary.encode(Fingerprint.encode(result)))
 
 proc getResponse*(T: typedesc[Stun], msg: seq[byte],
-    address: TransportAddress): Option[StunMessage] =
+    ta: TransportAddress): Option[StunMessage] =
+  if ta.family != AddressFamily.IPv4 and ta.family != AddressFamily.IPv6:
+    return none(StunMessage)
   let sm =
     try:
       StunMessage.decode(msg)
@@ -112,7 +115,8 @@ proc getResponse*(T: typedesc[Stun], msg: seq[byte],
     res.attributes.add(UnknownAttribute.encode(unknownAttr))
     return some(res)
 
-  #if sm.attributes.getAttribute())
+  res.attributes.add(XorMappedAddress.encode(ta, sm.transactionId))
+  return some(res)
 
 proc new*(T: typedesc[Stun]): T =
   result = T()
