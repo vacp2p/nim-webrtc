@@ -1,5 +1,6 @@
 import binary_serialization,
        stew/byteutils
+import utils
 
 type
 # Stun Attribute
@@ -96,5 +97,15 @@ proc encode*(T: typedesc[UnknownAttribute], unknownAttr: seq[uint16]): RawStunAt
     ua = T(unknownAttr: unknownAttr)
     value = Binary.encode(ua)
   result = RawStunAttribute(attributeType: AttrUnknownAttributes.uint16,
+                            length: value.len().uint16,
+                            value: value)
+
+type
+  Fingerprint* = object
+    crc32: uint32
+
+proc encode*(T: typedesc[Fingerprint], msg: seq[byte]): RawStunAttribute =
+  let value = Binary.encode(Fingerprint(crc32: crc32(msg) xor 0x5354554e'u32))
+  result = RawStunAttribute(attributeType: AttrFingerprint.uint16,
                             length: value.len().uint16,
                             value: value)

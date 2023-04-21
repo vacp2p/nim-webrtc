@@ -49,7 +49,7 @@ type
 
   RawStunMessage = object
     msgType: uint16
-    length* {.bin_value: it.content.len().}: uint16
+    length* {.bin_value: it.content.len() + 8.}: uint16
     magicCookie: uint32
     transactionId: array[12, byte]
     content* {.bin_len: it.length.}: seq[byte]
@@ -85,7 +85,8 @@ proc encode*(msg: StunMessage): seq[byte] =
     smi.content.add(Binary.encode(attr))
     smi.content.add(newSeq[byte](val[smi.content.len() mod 4]))
 
-  return Binary.encode(smi)
+  result = Binary.encode(smi)
+  result.add(Binary.encode(Fingerprint.encode(result)))
 
 proc getResponse*(T: typedesc[Stun], msg: seq[byte],
     address: TransportAddress): Option[StunMessage] =
