@@ -1,3 +1,12 @@
+# Nim-WebRTC
+# Copyright (c) 2023 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT))
+# at your option.
+# This file may not be copied, modified, or distributed except according to
+# those terms.
+
 import chronos, chronicles
 import stun
 
@@ -17,9 +26,8 @@ proc new*(T: typedesc[WebRTC], port: uint16 = 42657): T =
       msg = udp.getMessage()
     if Stun.isMessage(msg):
       let res = Stun.getResponse(msg, address)
-      echo res
       if res.isSome():
-        await udp.sendTo(address, res.get().encode())
+        await udp.sendTo(address, res.get())
 
     trace "onReceive", isStun = Stun.isMessage(msg)
     if not fut.completed(): fut.complete()

@@ -1,3 +1,12 @@
+# Nim-WebRTC
+# Copyright (c) 2023 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT))
+# at your option.
+# This file may not be copied, modified, or distributed except according to
+# those terms.
+
 import sequtils, typetraits
 import binary_serialization,
        stew/byteutils,
@@ -148,5 +157,17 @@ proc encode*(T: typedesc[XorMappedAddress], ta: TransportAddress,
             port: ta.port.distinctBase xor 0x2112'u16, address: address)
     value = Binary.encode(xma)
   result = RawStunAttribute(attributeType: AttrXORMappedAddress.uint16,
+                            length: value.len().uint16,
+                            value: value)
+
+# Message Integrity
+
+type
+  MessageIntegrity* = object
+    msgInt: seq[byte]
+
+proc encode*(T: typedesc[MessageIntegrity], msg: seq[byte], key: seq[byte]): RawStunAttribute =
+  let value = Binary.encode(T(msgInt: hmacSha1(key, msg)))
+  result = RawStunAttribute(attributeType: AttrMessageIntegrity.uint16,
                             length: value.len().uint16,
                             value: value)
