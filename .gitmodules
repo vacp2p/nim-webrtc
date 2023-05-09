@@ -1,3 +1,6 @@
 [submodule "usrsctp"]
 	path = usrsctp
 	url = git@github.com:sctplab/usrsctp.git
+[submodule "mbedtls"]
+	path = mbedtls
+	url = git@github.com:Mbed-TLS/mbedtls.git

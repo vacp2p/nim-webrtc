@@ -11,7 +11,7 @@ fi
 cd "${root}/usrsctp" && ./bootstrap && ./configure && make && cd -
 
 # add prelude
-cat "${root}/prelude.nim" > "${outputFile}"
+cat "${root}/prelude_usrsctp.nim" > "${outputFile}"
 
 # assemble list of C files to be compiled
 for file in `find ${root}/usrsctp/usrsctplib -name '*.c'`; do
