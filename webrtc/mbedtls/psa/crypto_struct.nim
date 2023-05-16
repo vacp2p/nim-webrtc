@@ -1,26 +1,5 @@
-#import strformat, os
-#
-## C include directory
-#const root = currentSourcePath.parentDir
-#const mbedtlsInclude = root/"mbedtls"/"include"
-#const mbedtlsLibrary = root/"mbedtls"/"library"
-#
-#{.passc: fmt"-I{mbedtlsInclude} -I{mbedtlsLibrary}".}
-#
-import "crypto_driver_contexts_primitives"
-import "crypto_driver_common"
 import "crypto_types"
-import "crypto_platform"
-import "crypto_values"
-import "crypto_sizes"
-import "crypto_builtin_primitives"
-import "crypto_driver_contexts_composites"
-import "crypto_builtin_composites"
-import "crypto_driver_contexts_key_derivation"
 {.compile: "./mbedtls/library/psa_crypto_client.c".}
-# Generated @ 2023-05-12T13:12:44+02:00
-# Command line:
-#   /home/lchenut/.nimble/pkgs/nimterop-0.6.13/nimterop/toast --pnim --preprocess --nocomment --replace=_pms_rsa=u_pms_rsa --replace=_pms_dhm=u_pms_dhm --replace=_pms_ecdh=u_pms_ecdh --replace=_pms_psk=u_pms_psk --replace=_pms_dhe_psk=u_pms_dhe_psk --replace=_pms_rsa_psk=u_pms_rsa_psk --replace=_pms_ecdhe_psk=u_pms_ecdhe_psk --replace=_pms_ecjpake=u_pms_ecjpake --replace=private_xm1=private_xm1_1 --replace=private_xm2=private_xm2_1 --includeDirs=./mbedtls/include --includeDirs=./mbedtls/library ./mbedtls/include/psa/crypto_struct.h
 
 # const 'PSA_HASH_OPERATION_INIT' has unsupported value '{ 0, { 0 } }'
 # const 'PSA_CIPHER_OPERATION_INIT' has unsupported value '{ 0, 0, 0, 0, { 0 } }'
@@ -33,14 +12,15 @@ import "crypto_driver_contexts_key_derivation"
 # const 'PSA_KEY_ATTRIBUTES_INIT' has unsupported value '{ PSA_CORE_KEY_ATTRIBUTES_INIT, NULL, 0 }'
 # const 'PSA_SIGN_HASH_INTERRUPTIBLE_OPERATION_INIT' has unsupported value '{ 0, { 0 }, 0, 0 }'
 # const 'PSA_VERIFY_HASH_INTERRUPTIBLE_OPERATION_INIT' has unsupported value '{ 0, { 0 }, 0, 0 }'
-{.push hint[ConvFromXtoItselfNotNeeded]: off.}
 
+{.push hint[ConvFromXtoItselfNotNeeded]: off.}
 
 {.pragma: impcrypto_structHdr,
   header: "/home/lchenut/minnim/webrtc/mbedtls/include/psa/crypto_struct.h".}
 {.experimental: "codeReordering".}
 {.passc: "-I./mbedtls/include".}
 {.passc: "-I./mbedtls/library".}
+
 const
   PSA_MAX_KEY_BITS* = 0x0000FFF8
   MBEDTLS_PSA_KA_FLAG_HAS_SLOT_NUMBER* = (

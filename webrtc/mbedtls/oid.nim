@@ -1,20 +1,8 @@
-#import strformat, os
-#
-## C include directory
-#const root = currentSourcePath.parentDir
-#const mbedtlsInclude = root/"mbedtls"/"include"
-#const mbedtlsLibrary = root/"mbedtls"/"library"
-#
-#{.passc: fmt"-I{mbedtlsInclude} -I{mbedtlsLibrary}".}
-#
 import "asn1"
 import "pk"
 import "md"
 import "ecp"
 import "cipher"
-# Generated @ 2023-05-11T11:19:12+02:00
-# Command line:
-#   /home/lchenut/.nimble/pkgs/nimterop-0.6.13/nimterop/toast --pnim --preprocess --nocomment --noHeader --replace=_pms_rsa=u_pms_rsa --replace=_pms_dhm=u_pms_dhm --replace=_pms_ecdh=u_pms_ecdh --replace=_pms_psk=u_pms_psk --replace=_pms_dhe_psk=u_pms_dhe_psk --replace=_pms_rsa_psk=u_pms_rsa_psk --replace=_pms_ecdhe_psk=u_pms_ecdhe_psk --replace=_pms_ecjpake=u_pms_ecjpake --replace=private_xm1=private_xm1_1 --replace=private_xm2=private_xm2_1 --includeDirs=./mbedtls/include --includeDirs=./mbedtls/library ./mbedtls/include/mbedtls/oid.h
 
 # const 'MBEDTLS_OID_RSA_COMPANY' has unsupported value 'MBEDTLS_OID_ISO_MEMBER_BODIES MBEDTLS_OID_COUNTRY_US MBEDTLS_OID_ORG_RSA_DATA_SECURITY'
 # const 'MBEDTLS_OID_ANSI_X9_62' has unsupported value 'MBEDTLS_OID_ISO_MEMBER_BODIES MBEDTLS_OID_COUNTRY_US MBEDTLS_OID_ORG_ANSI_X9_62'
@@ -167,12 +155,13 @@ import "cipher"
 # const 'MBEDTLS_OID_ECDSA_SHA256' has unsupported value 'MBEDTLS_OID_ANSI_X9_62_SIG_SHA2 "\x02"'
 # const 'MBEDTLS_OID_ECDSA_SHA384' has unsupported value 'MBEDTLS_OID_ANSI_X9_62_SIG_SHA2 "\x03"'
 # const 'MBEDTLS_OID_ECDSA_SHA512' has unsupported value 'MBEDTLS_OID_ANSI_X9_62_SIG_SHA2 "\x04"'
-{.push hint[ConvFromXtoItselfNotNeeded]: off.}
 
+{.push hint[ConvFromXtoItselfNotNeeded]: off.}
 
 {.experimental: "codeReordering".}
 {.passc: "-I./mbedtls/include".}
 {.passc: "-I./mbedtls/library".}
+
 const
   MBEDTLS_ERR_OID_NOT_FOUND* = -0x0000002E
   MBEDTLS_ERR_OID_BUF_TOO_SMALL* = -0x0000000B

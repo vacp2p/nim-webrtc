@@ -1,37 +1,9 @@
-#import strformat, os
-#
-## C include directory
-#const root = currentSourcePath.parentDir
-#const mbedtlsInclude = root/"mbedtls"/"include"
-#const mbedtlsLibrary = root/"mbedtls"/"library"
-#
-#{.passc: fmt"-I{mbedtlsInclude} -I{mbedtlsLibrary}".}
-#
-import "private_access"
-import "build_info"
-import "mbedtls_config"
-import "config_psa"
-import "check_config"
 import "asn1"
-import "platform_util"
-import "platform_time"
-import "bignum"
 import "pk"
 import "md"
-import "rsa"
-import "ecp"
-import "ecdsa"
-import "oid"
-import "hmac_drbg"
-import "asn1write"
-import "nist_kw"
-import "hash_info"
-{.compile: "./mbedtls/library/rsa_alt_helpers.c".}
+
 {.compile: "./mbedtls/library/x509.c".}
 {.compile: "./mbedtls/library/x509_create.c".}
-# Generated @ 2023-05-11T11:19:15+02:00
-# Command line:
-#   /home/lchenut/.nimble/pkgs/nimterop-0.6.13/nimterop/toast --pnim --preprocess --nocomment --noHeader --replace=_pms_rsa=u_pms_rsa --replace=_pms_dhm=u_pms_dhm --replace=_pms_ecdh=u_pms_ecdh --replace=_pms_psk=u_pms_psk --replace=_pms_dhe_psk=u_pms_dhe_psk --replace=_pms_rsa_psk=u_pms_rsa_psk --replace=_pms_ecdhe_psk=u_pms_ecdhe_psk --replace=_pms_ecjpake=u_pms_ecjpake --replace=private_xm1=private_xm1_1 --replace=private_xm2=private_xm2_1 --includeDirs=./mbedtls/include --includeDirs=./mbedtls/library ./mbedtls/include/mbedtls/x509.h
 
 # const 'MBEDTLS_X509_EXT_AUTHORITY_KEY_IDENTIFIER' has unsupported value 'MBEDTLS_OID_X509_EXT_AUTHORITY_KEY_IDENTIFIER'
 # const 'MBEDTLS_X509_EXT_SUBJECT_KEY_IDENTIFIER' has unsupported value 'MBEDTLS_OID_X509_EXT_SUBJECT_KEY_IDENTIFIER'
@@ -51,12 +23,13 @@ import "hash_info"
 # const 'MBEDTLS_X509_EXT_NS_CERT_TYPE' has unsupported value 'MBEDTLS_OID_X509_EXT_NS_CERT_TYPE'
 # proc 'mbedtls_x509_dn_get_next' skipped - static inline procs cannot work with '--noHeader | -H'
 # const 'MBEDTLS_X509_SAFE_SNPRINTF' has unsupported value 'do { if (ret < 0 || (size_t) ret >= n) return MBEDTLS_ERR_X509_BUFFER_TOO_SMALL; n -= (size_t) ret; p += (size_t) ret; } while (0)'
-{.push hint[ConvFromXtoItselfNotNeeded]: off.}
 
+{.push hint[ConvFromXtoItselfNotNeeded]: off.}
 
 {.experimental: "codeReordering".}
 {.passc: "-I./mbedtls/include".}
 {.passc: "-I./mbedtls/library".}
+
 const
   MBEDTLS_X509_MAX_INTERMEDIATE_CA* = 8
   MBEDTLS_ERR_X509_FEATURE_UNAVAILABLE* = -0x00002080

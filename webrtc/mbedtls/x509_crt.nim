@@ -1,43 +1,23 @@
-#import strformat, os
-#
-## C include directory
-#const root = currentSourcePath.parentDir
-#const mbedtlsInclude = root/"mbedtls"/"include"
-#const mbedtlsLibrary = root/"mbedtls"/"library"
-#
-#{.passc: fmt"-I{mbedtlsInclude} -I{mbedtlsLibrary}".}
-#
-import "private_access"
-import "build_info"
-import "mbedtls_config"
-import "config_psa"
-import "check_config"
 import "x509"
-import "asn1"
-import "platform_util"
-import "platform_time"
-import "bignum"
-import "pk"
-import "md"
-import "rsa"
-import "ecp"
-import "ecdsa"
 import "x509_crl"
+import "asn1"
+import "bignum"
+import "md"
+import "pk"
+
 {.compile: "./mbedtls/library/x509_crt.c".}
 {.compile: "./mbedtls/library/x509write_crt.c".}
-# Generated @ 2023-05-11T11:19:15+02:00
-# Command line:
-#   /home/lchenut/.nimble/pkgs/nimterop-0.6.13/nimterop/toast --pnim --preprocess --nocomment --noHeader --replace=_pms_rsa=u_pms_rsa --replace=_pms_dhm=u_pms_dhm --replace=_pms_ecdh=u_pms_ecdh --replace=_pms_psk=u_pms_psk --replace=_pms_dhe_psk=u_pms_dhe_psk --replace=_pms_rsa_psk=u_pms_rsa_psk --replace=_pms_ecdhe_psk=u_pms_ecdhe_psk --replace=_pms_ecjpake=u_pms_ecjpake --replace=private_xm1=private_xm1_1 --replace=private_xm2=private_xm2_1 --includeDirs=./mbedtls/include --includeDirs=./mbedtls/library ./mbedtls/include/mbedtls/x509_crt.h
 
 # const 'MBEDTLS_X509_CRT_ERROR_INFO_LIST' has unsupported value 'X509_CRT_ERROR_INFO(MBEDTLS_X509_BADCERT_EXPIRED, "MBEDTLS_X509_BADCERT_EXPIRED", "The certificate validity has expired") X509_CRT_ERROR_INFO(MBEDTLS_X509_BADCERT_REVOKED, "MBEDTLS_X509_BADCERT_REVOKED", "The certificate has been revoked (is on a CRL)") X509_CRT_ERROR_INFO(MBEDTLS_X509_BADCERT_CN_MISMATCH, "MBEDTLS_X509_BADCERT_CN_MISMATCH", "The certificate Common Name (CN) does not match with the expected CN") X509_CRT_ERROR_INFO(MBEDTLS_X509_BADCERT_NOT_TRUSTED, "MBEDTLS_X509_BADCERT_NOT_TRUSTED", "The certificate is not correctly signed by the trusted CA") X509_CRT_ERROR_INFO(MBEDTLS_X509_BADCRL_NOT_TRUSTED, "MBEDTLS_X509_BADCRL_NOT_TRUSTED", "The CRL is not correctly signed by the trusted CA") X509_CRT_ERROR_INFO(MBEDTLS_X509_BADCRL_EXPIRED, "MBEDTLS_X509_BADCRL_EXPIRED", "The CRL is expired") X509_CRT_ERROR_INFO(MBEDTLS_X509_BADCERT_MISSING, "MBEDTLS_X509_BADCERT_MISSING", "Certificate was missing") X509_CRT_ERROR_INFO(MBEDTLS_X509_BADCERT_SKIP_VERIFY, "MBEDTLS_X509_BADCERT_SKIP_VERIFY", "Certificate verification was skipped") X509_CRT_ERROR_INFO(MBEDTLS_X509_BADCERT_OTHER, "MBEDTLS_X509_BADCERT_OTHER", "Other reason (can be used by verify callback)") X509_CRT_ERROR_INFO(MBEDTLS_X509_BADCERT_FUTURE, "MBEDTLS_X509_BADCERT_FUTURE", "The certificate validity starts in the future") X509_CRT_ERROR_INFO(MBEDTLS_X509_BADCRL_FUTURE, "MBEDTLS_X509_BADCRL_FUTURE", "The CRL is from the future") X509_CRT_ERROR_INFO(MBEDTLS_X509_BADCERT_KEY_USAGE, "MBEDTLS_X509_BADCERT_KEY_USAGE", "Usage does not match the keyUsage extension") X509_CRT_ERROR_INFO(MBEDTLS_X509_BADCERT_EXT_KEY_USAGE, "MBEDTLS_X509_BADCERT_EXT_KEY_USAGE", "Usage does not match the extendedKeyUsage extension") X509_CRT_ERROR_INFO(MBEDTLS_X509_BADCERT_NS_CERT_TYPE, "MBEDTLS_X509_BADCERT_NS_CERT_TYPE", "Usage does not match the nsCertType extension") X509_CRT_ERROR_INFO(MBEDTLS_X509_BADCERT_BAD_MD, "MBEDTLS_X509_BADCERT_BAD_MD", "The certificate is signed with an unacceptable hash.") X509_CRT_ERROR_INFO(MBEDTLS_X509_BADCERT_BAD_PK, "MBEDTLS_X509_BADCERT_BAD_PK", "The certificate is signed with an unacceptable PK alg (eg RSA vs ECDSA).") X509_CRT_ERROR_INFO(MBEDTLS_X509_BADCERT_BAD_KEY, "MBEDTLS_X509_BADCERT_BAD_KEY", "The certificate is signed with an unacceptable key (eg bad curve, RSA too short).") X509_CRT_ERROR_INFO(MBEDTLS_X509_BADCRL_BAD_MD, "MBEDTLS_X509_BADCRL_BAD_MD", "The CRL is signed with an unacceptable hash.") X509_CRT_ERROR_INFO(MBEDTLS_X509_BADCRL_BAD_PK, "MBEDTLS_X509_BADCRL_BAD_PK", "The CRL is signed with an unacceptable PK alg (eg RSA vs ECDSA).") X509_CRT_ERROR_INFO(MBEDTLS_X509_BADCRL_BAD_KEY, "MBEDTLS_X509_BADCRL_BAD_KEY", "The CRL is signed with an unacceptable key (eg bad curve, RSA too short).")'
 # const 'MBEDTLS_X509_MAX_VERIFY_CHAIN_SIZE' has unsupported value '(MBEDTLS_X509_MAX_INTERMEDIATE_CA + 2)'
 # proc 'mbedtls_x509_crt_has_ext_type' skipped - static inline procs cannot work with '--noHeader | -H'
-{.push hint[ConvFromXtoItselfNotNeeded]: off.}
 
+{.push hint[ConvFromXtoItselfNotNeeded]: off.}
 
 {.experimental: "codeReordering".}
 {.passc: "-I./mbedtls/include".}
 {.passc: "-I./mbedtls/library".}
+
 const
   MBEDTLS_X509_CRT_VERSION_1* = 0
   MBEDTLS_X509_CRT_VERSION_2* = 1
