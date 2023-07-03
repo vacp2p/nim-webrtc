@@ -16,15 +16,15 @@ type
     # isClosed: bool
     # isEof: bool
 
-method init(self: WebRTCConn, conn: WebRTCConn, address: TransportAddress) {.async, base.} =
+method init*(self: WebRTCConn, conn: WebRTCConn, address: TransportAddress) {.async, base.} =
   self.conn = conn
   self.address = address
 
-method close(self: WebRTCConn) {.async, base.} =
+method close*(self: WebRTCConn) {.async, base.} =
   doAssert(false, "not implemented!")
 
-method write(self: WebRTCConn, msg: seq[byte]) {.async, base.} =
+method write*(self: WebRTCConn, msg: seq[byte]) {.async, base.} =
   doAssert(false, "not implemented!")
 
-method read(self: WebRTCConn): seq[byte] =
+method read*(self: WebRTCConn): Future[seq[byte]] {.async, base.} =
   doAssert(false, "not implemented!")

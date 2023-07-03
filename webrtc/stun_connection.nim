@@ -28,7 +28,7 @@ proc handles(self: StunConn) {.async.} =
       recvEvent.fire()
 
 method init(self: StunConn, conn: WebRTCConn, address: TransportAddress) {.async.} =
-  procCall(WebRTCConn(self).init(conn, address))
+  await procCall(WebRTCConn(self).init(conn, address))
 
   self.recvEvent = newAsyncEvent()
   self.handlesFut = handles()
@@ -40,7 +40,7 @@ method close(self: StunConn) {.async.} =
 method write(self: StunConn, msg: seq[byte]) {.async.} =
   await self.conn.write(msg)
 
-method read(self: StunConn): seq[byte] {.async.} =
+method read(self: StunConn): Future[seq[byte]] {.async.} =
   while self.recvData.len() <= 0:
     self.recvEvent.clear()
     await self.recvEvent.wait()

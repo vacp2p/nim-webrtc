@@ -21,15 +21,19 @@ import mbedtls/x509
 import mbedtls/x509_crt
 import mbedtls/bignum
 import mbedtls/error
+import mbedtls/net_sockets
 
 type
   DtlsConn* = ref object of WebRTCConn
     recvData: seq[seq[byte]]
     recvEvent: AsyncEvent
-    handlesFut: Future[void]
+    sendEvent: AsyncEvent
 
     entropy: mbedtls_entropy_context
     ctr_drbg: mbedtls_ctr_drbg_context
+
+    config: mbedtls_ssl_config
+    ssl: mbedtls_ssl_context
 
 proc mbedtls_pk_rsa(pk: mbedtls_pk_context): ptr mbedtls_rsa_context =
   var key = pk
@@ -41,11 +45,9 @@ proc mbedtls_pk_rsa(pk: mbedtls_pk_context): ptr mbedtls_rsa_context =
 
 proc generateKey(self: DtlsConn): mbedtls_pk_context =
   var res: mbedtls_pk_context
-  mbedtls_pk_init(addr res)
-  echo "=> ", mbedtls_pk_setup(addr res, mbedtls_pk_info_from_type(MBEDTLS_PK_RSA))
-  echo "=> ", mbedtls_rsa_gen_key(mbedtls_pk_rsa(res),
-                             mbedtls_ctr_drbg_random,
-                             cast[pointer](addr self.ctr_drbg), 4096, 65537)
+  mb_pk_init(res)
+  discard mbedtls_pk_setup(addr res, mbedtls_pk_info_from_type(MBEDTLS_PK_RSA))
+  mb_rsa_gen_key(mb_pk_rsa(res), mbedtls_ctr_drbg_random, self.ctr_drbg, 4096, 65537)
   return res
 
 proc generateCertificate(self: DtlsConn): mbedtls_x509_crt =
@@ -59,52 +61,77 @@ proc generateCertificate(self: DtlsConn): mbedtls_x509_crt =
   var issuer_key = self.generateKey()
   var write_cert: mbedtls_x509write_cert
   var serial_mpi: mbedtls_mpi
-  mbedtls_x509write_crt_init(addr write_cert)
-  mbedtls_x509write_crt_set_md_alg(addr write_cert, MBEDTLS_MD_SHA256);
-  mbedtls_x509write_crt_set_subject_key(addr write_cert, addr issuer_key)
-  mbedtls_x509write_crt_set_issuer_key(addr write_cert, addr issuer_key)
-  echo mbedtls_x509write_crt_set_subject_name(addr write_cert, name.cstring)
-  echo mbedtls_x509write_crt_set_issuer_name(addr write_cert, name.cstring)
-  echo mbedtls_x509write_crt_set_validity(addr write_cert, time_from.cstring, time_to.cstring)
-  echo mbedtls_x509write_crt_set_basic_constraints(addr write_cert, 0, -1)
-  echo mbedtls_x509write_crt_set_subject_key_identifier(addr write_cert)
-  echo mbedtls_x509write_crt_set_authority_key_identifier(addr write_cert);
-  mbedtls_mpi_init(addr serial_mpi);
-  var
-    serial_hex = newString(16)
-    buf = newString(4096)
-  echo mbedtls_mpi_read_string(addr serial_mpi, 16, serial_hex.cstring);
-  echo mbedtls_x509write_crt_set_serial(addr write_cert, addr serial_mpi)
-  echo mbedtls_x509write_crt_pem(addr write_cert, cast[ptr byte](buf.cstring), buf.len().uint,
-                            mbedtls_ctr_drbg_random, addr self.ctr_drbg)
-  echo mbedtls_x509_crt_parse(addr result, cast[ptr byte](buf.cstring), buf.cstring.len().uint + 1)
+  mb_x509write_crt_init(write_cert)
+  mb_x509write_crt_set_md_alg(write_cert, MBEDTLS_MD_SHA256);
+  mb_x509write_crt_set_subject_key(write_cert, issuer_key)
+  mb_x509write_crt_set_issuer_key(write_cert, issuer_key)
+  mb_x509write_crt_set_subject_name(write_cert, name)
+  mb_x509write_crt_set_issuer_name(write_cert, name)
+  mb_x509write_crt_set_validity(write_cert, time_from, time_to)
+  mb_x509write_crt_set_basic_constraints(write_cert, 0, -1)
+  mb_x509write_crt_set_subject_key_identifier(write_cert)
+  mb_x509write_crt_set_authority_key_identifier(write_cert)
+  mb_mpi_init(serial_mpi)
+  let serial_hex = mb_mpi_read_string(serial_mpi, 16)
+  mb_x509write_crt_set_serial(write_cert, serial_mpi)
+  let buf = mb_x509write_crt_pem(write_cert, 4096, mbedtls_ctr_drbg_random, self.ctr_drbg)
+  mb_x509_crt_parse(result, buf)
+
+proc dtlsSend*(ctx: pointer, buf: ptr byte, len: uint): cint {.cdecl.} =
+  echo "dtlsSend: "
+  let self = cast[ptr DtlsConn](ctx)
+  self.sendEvent.fire()
+
+proc dtlsRecv*(ctx: pointer, buf: ptr byte, len: uint): cint {.cdecl.} =
+  echo "dtlsRecv: "
+  let self = cast[ptr DtlsConn](ctx)[]
+  self.recvEvent.fire()
 
 method init*(self: DtlsConn, conn: WebRTCConn, address: TransportAddress) {.async.} =
   await procCall(WebRTCConn(self).init(conn, address))
+  self.recvEvent = AsyncEvent()
+  self.sendEvent = AsyncEvent()
 
-  mbedtls_ctr_drbg_init(cast[ptr mbedtls_ctr_drbg_context](addr self.ctr_drbg))
-  mbedtls_entropy_init(cast[ptr mbedtls_entropy_context](addr self.entropy))
-  if mbedtls_ctr_drbg_seed(cast[ptr mbedtls_ctr_drbg_context](addr self.ctr_drbg),
-                           mbedtls_entropy_func, cast[pointer](addr self.entropy),
-                           nil, 0) != 0:
-    echo "Something's not quite right"
-    return
+  mb_ctr_drbg_init(self.ctr_drbg)
+  mb_entropy_init(self.entropy)
+  mb_ctr_drbg_seed(self.ctr_drbg, mbedtls_entropy_func,
+                   self.entropy, nil, 0)
+  var
+    srvcert = self.generateCertificate()
+    pkey = self.generateKey()
+    selfvar = self
 
-proc testtruc() =
-  var write_cert: mbedtls_x509write_cert
-  mbedtls_x509write_crt_init(cast[ptr mbedtls_x509write_cert](addr write_cert))
-  echo mbedtls_x509write_crt_set_subject_name(
-    cast[ptr mbedtls_x509write_cert](addr write_cert), "aa".cstring)
+  mb_ssl_init(self.ssl)
+  mb_ssl_config_init(self.config)
+  mb_ssl_config_defaults(self.config, MBEDTLS_SSL_IS_SERVER,
+                         MBEDTLS_SSL_TRANSPORT_DATAGRAM,
+                         MBEDTLS_SSL_PRESET_DEFAULT)
+  mb_ssl_conf_rng(self.config, mbedtls_ctr_drbg_random, self.ctr_drbg)
+  mb_ssl_conf_read_timeout(self.config, 10000) # in milliseconds
+  mb_ssl_conf_ca_chain(self.config, srvcert.next, nil)
+  mb_ssl_conf_own_cert(self.config, srvcert, pkey)
+  # cookies ?
+  mb_ssl_setup(self.ssl, self.config)
+  mb_ssl_session_reset(self.ssl)
+  mb_ssl_set_bio(self.ssl, cast[pointer](addr selfvar),
+                 dtlsSend, dtlsRecv, nil)
+  while true:
+    mb_ssl_handshake(self.ssl)
 
-
-method close*(self: WebRTCConn) {.async.} =
+method close*(self: DtlsConn) {.async.} =
   discard
 
-method write*(self: WebRTCConn, msg: seq[byte]) {.async.} =
-  discard
+method write*(self: DtlsConn, msg: seq[byte]) {.async.} =
+  var buf = msg
+  self.sendEvent.clear()
+  discard mbedtls_ssl_write(addr self.ssl, cast[ptr byte](buf.cstring), buf.len())
+  await self.sendEvent.wait()
 
-method read*(self: WebRTCConn): Future[seq[byte]] {.async.} =
-  discard
+method read*(self: DtlsConn): Future[seq[byte]] {.async.} =
+  var res = newString(4096)
+  self.recvEvent.clear()
+  discard mbedtls_ssl_read(addr self.ssl, cast[ptr byte](res.cstring), 4096)
+  await self.recvEvent.wait()
 
 proc main {.async.} =
   let laddr = initTAddress("127.0.0.1:" & "4242")
