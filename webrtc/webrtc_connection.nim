@@ -11,8 +11,8 @@ import chronos
 
 type
   WebRTCConn* = ref object of RootObj
-    conn: WebRTCConn
-    address: TransportAddress
+    conn*: WebRTCConn
+    address*: TransportAddress
     # isClosed: bool
     # isEof: bool
 

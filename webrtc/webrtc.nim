@@ -8,7 +8,7 @@
 # those terms.
 
 import chronos, chronicles
-import stun
+import stun/stun
 
 logScope:
   topics = "webrtc"

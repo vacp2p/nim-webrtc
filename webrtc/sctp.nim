@@ -8,7 +8,7 @@
 # those terms.
 
 import tables, bitops, posix, strutils, sequtils
-import chronos, chronicles, stew/ranges/ptr_arith
+import chronos, chronicles, stew/[ranges/ptr_arith, byteutils]
 import usrsctp
 
 export chronicles
@@ -101,9 +101,12 @@ proc write*(self: SctpConnection, buf: seq[byte]) {.async.} =
   self.sctp.sentConnection = self
   self.sctp.sentAddress = self.address
   let sendvErr = self.sctp.usrsctpAwait:
-    self.sctpSocket.usrsctp_sendv(addr buf[0], buf.len.uint,
+    self.sctpSocket.usrsctp_sendv(unsafeAddr buf[0], buf.len.uint,
                                   nil, 0, nil, 0,
                                   SCTP_SENDV_NOINFO, 0)
+
+proc write*(self: SctpConnection, s: string) {.async.} =
+  await self.write(s.toBytes())
 
 proc close*(self: SctpConnection) {.async.} =
   self.sctp.usrsctpAwait: self.sctpSocket.usrsctp_close()
@@ -143,7 +146,7 @@ proc handleUpcall(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
       if bitand(flags, MSG_NOTIFICATION) != 0:
         trace "Notification received", length = n
       else:
-        conn.dataRecv = conn.dataRecv.concat(buffer[0..n])
+        conn.dataRecv = conn.dataRecv.concat(buffer[0..<n])
         conn.recvEvent.fire()
   else:
     warn "Handle Upcall unexpected event", events
@@ -237,7 +240,7 @@ proc startServer*(self: Sctp, sctpPort: uint16 = 5000) =
   doAssert 0 == sock.usrsctp_set_upcall(handleAccept, cast[pointer](self))
   self.sockServer = sock
 
-proc closeServer(self: Sctp) =
+proc stopServer*(self: Sctp) =
   if not self.isServer:
     trace "Try to close a client"
     return
@@ -254,7 +257,7 @@ proc new*(T: typedesc[Sctp], port: uint16 = 9899): T =
   proc onReceive(udp: DatagramTransport, address: TransportAddress) {.async, gcsafe.} =
     let
       msg = udp.getMessage()
-      data = usrsctp_dumppacket(addr msg[0], uint(msg.len), SCTP_DUMP_INBOUND)
+      data = usrsctp_dumppacket(unsafeAddr msg[0], uint(msg.len), SCTP_DUMP_INBOUND)
     if data != nil:
       if sctp.isServer:
         trace "onReceive (server)", data = data.packetPretty(), length = msg.len(), address
@@ -264,12 +267,12 @@ proc new*(T: typedesc[Sctp], port: uint16 = 9899): T =
 
     if sctp.isServer:
       sctp.sentAddress = address
-      usrsctp_conninput(cast[pointer](sctp), addr msg[0], uint(msg.len), 0)
+      usrsctp_conninput(cast[pointer](sctp), unsafeAddr msg[0], uint(msg.len), 0)
     else:
       let conn = await sctp.getOrCreateConnection(udp, address)
       sctp.sentConnection = conn
       sctp.sentAddress = address
-      usrsctp_conninput(cast[pointer](sctp), addr msg[0], uint(msg.len), 0)
+      usrsctp_conninput(cast[pointer](sctp), unsafeAddr msg[0], uint(msg.len), 0)
   let
     localAddr = TransportAddress(family: AddressFamily.IPv4, port: Port(port))
     laddr = initTAddress("127.0.0.1:" & $port)
@@ -284,6 +287,10 @@ proc new*(T: typedesc[Sctp], port: uint16 = 9899): T =
   usrsctp_register_address(cast[pointer](sctp))
 
   return sctp
+
+proc stop*(self: Sctp) {.async.} =
+  discard self.usrsctpAwait usrsctp_finish()
+  self.udp.close()
 
 proc listen*(self: Sctp): Future[SctpConnection] {.async.} =
   if not self.isServer:

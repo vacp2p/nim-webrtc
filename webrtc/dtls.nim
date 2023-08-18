@@ -8,7 +8,7 @@
 # those terms.
 
 import std/times
-import chronos
+import chronos, chronicles
 import webrtc_connection
 
 import mbedtls/ssl
@@ -22,6 +22,10 @@ import mbedtls/x509_crt
 import mbedtls/bignum
 import mbedtls/error
 import mbedtls/net_sockets
+import mbedtls/timing
+
+logScope:
+  topics = "webrtc dtls"
 
 type
   DtlsConn* = ref object of WebRTCConn
@@ -31,6 +35,7 @@ type
 
     entropy: mbedtls_entropy_context
     ctr_drbg: mbedtls_ctr_drbg_context
+    timer: mbedtls_timing_delay_context
 
     config: mbedtls_ssl_config
     ssl: mbedtls_ssl_context
@@ -57,7 +62,6 @@ proc generateCertificate(self: DtlsConn): mbedtls_x509_crt =
     time_from = times.now().format(time_format)
     time_to = (times.now() + times.years(1)).format(time_format)
 
-
   var issuer_key = self.generateKey()
   var write_cert: mbedtls_x509write_cert
   var serial_mpi: mbedtls_mpi
@@ -78,14 +82,15 @@ proc generateCertificate(self: DtlsConn): mbedtls_x509_crt =
   mb_x509_crt_parse(result, buf)
 
 proc dtlsSend*(ctx: pointer, buf: ptr byte, len: uint): cint {.cdecl.} =
-  echo "dtlsSend: "
+  echo "Send: ", len
   let self = cast[ptr DtlsConn](ctx)
   self.sendEvent.fire()
 
 proc dtlsRecv*(ctx: pointer, buf: ptr byte, len: uint): cint {.cdecl.} =
-  echo "dtlsRecv: "
+  echo "Recv: ", len
   let self = cast[ptr DtlsConn](ctx)[]
-  self.recvEvent.fire()
+
+  let x = self.read()
 
 method init*(self: DtlsConn, conn: WebRTCConn, address: TransportAddress) {.async.} =
   await procCall(WebRTCConn(self).init(conn, address))
@@ -110,7 +115,10 @@ method init*(self: DtlsConn, conn: WebRTCConn, address: TransportAddress) {.asyn
   mb_ssl_conf_read_timeout(self.config, 10000) # in milliseconds
   mb_ssl_conf_ca_chain(self.config, srvcert.next, nil)
   mb_ssl_conf_own_cert(self.config, srvcert, pkey)
-  # cookies ?
+  mbedtls_ssl_set_timer_cb(addr self.ssl, cast[pointer](addr self.timer),
+                           mbedtls_timing_set_delay,
+                           mbedtls_timing_get_delay)
+  # cookie ?
   mb_ssl_setup(self.ssl, self.config)
   mb_ssl_session_reset(self.ssl)
   mb_ssl_set_bio(self.ssl, cast[pointer](addr selfvar),
@@ -118,25 +126,21 @@ method init*(self: DtlsConn, conn: WebRTCConn, address: TransportAddress) {.asyn
   while true:
     mb_ssl_handshake(self.ssl)
 
-method close*(self: DtlsConn) {.async.} =
-  discard
-
 method write*(self: DtlsConn, msg: seq[byte]) {.async.} =
   var buf = msg
   self.sendEvent.clear()
-  discard mbedtls_ssl_write(addr self.ssl, cast[ptr byte](buf.cstring), buf.len())
+  discard mbedtls_ssl_write(addr self.ssl, cast[ptr byte](addr buf[0]), buf.len().uint)
   await self.sendEvent.wait()
 
 method read*(self: DtlsConn): Future[seq[byte]] {.async.} =
-  var res = newString(4096)
-  self.recvEvent.clear()
-  discard mbedtls_ssl_read(addr self.ssl, cast[ptr byte](res.cstring), 4096)
-  await self.recvEvent.wait()
+  return await self.conn.read()
+
+method close*(self: DtlsConn) {.async.} =
+  discard
 
 proc main {.async.} =
   let laddr = initTAddress("127.0.0.1:" & "4242")
   var dtls = DtlsConn()
   await dtls.init(nil, laddr)
-  let cert = dtls.generateCertificate()
 
 waitFor(main())

@@ -8,7 +8,7 @@
 # those terms.
 
 import chronos
-import webrtc_connection, stun
+import ../webrtc_connection, stun
 
 type
   StunConn* = ref object of WebRTCConn
@@ -24,8 +24,8 @@ proc handles(self: StunConn) {.async.} =
       if res.isSome():
         await self.conn.write(res.get())
     else:
-      recvData.add(msg)
-      recvEvent.fire()
+      self.recvData.add(msg)
+      self.recvEvent.fire()
 
 method init(self: StunConn, conn: WebRTCConn, address: TransportAddress) {.async.} =
   await procCall(WebRTCConn(self).init(conn, address))

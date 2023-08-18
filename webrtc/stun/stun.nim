@@ -13,7 +13,7 @@ import chronos,
        binary_serialization,
        stew/objects,
        stew/byteutils
-import stunattributes
+import stun_attributes
 
 export binary_serialization
 

@@ -7,8 +7,11 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import chronos
+import chronos, chronicles
 import webrtc_connection
+
+logScope:
+  topics = "webrtc udp"
 
 type
   UdpConn* = ref object of WebRTCConn
@@ -25,7 +28,7 @@ method init(self: UdpConn, conn: WebRTCConn, address: TransportAddress) {.async.
     self.recvEvent.fire()
 
   self.recvEvent = newAsyncEvent()
-  self.udp = newDatagramTransport(onReceive)
+  self.udp = newDatagramTransport(onReceive, local = address)
 
 method close(self: UdpConn) {.async.} =
   self.udp.close()
