@@ -9,7 +9,7 @@
 
 import std/times
 import chronos, chronicles
-import webrtc_connection
+import ./utils, ../webrtc_connection
 
 import mbedtls/ssl
 import mbedtls/pk
@@ -39,47 +39,6 @@ type
 
     config: mbedtls_ssl_config
     ssl: mbedtls_ssl_context
-
-proc mbedtls_pk_rsa(pk: mbedtls_pk_context): ptr mbedtls_rsa_context =
-  var key = pk
-  case mbedtls_pk_get_type(addr key):
-    of MBEDTLS_PK_RSA:
-      return cast[ptr mbedtls_rsa_context](pk.private_pk_ctx)
-    else:
-      return nil
-
-proc generateKey(self: DtlsConn): mbedtls_pk_context =
-  var res: mbedtls_pk_context
-  mb_pk_init(res)
-  discard mbedtls_pk_setup(addr res, mbedtls_pk_info_from_type(MBEDTLS_PK_RSA))
-  mb_rsa_gen_key(mb_pk_rsa(res), mbedtls_ctr_drbg_random, self.ctr_drbg, 4096, 65537)
-  return res
-
-proc generateCertificate(self: DtlsConn): mbedtls_x509_crt =
-  let
-    name = "C=FR,O=webrtc,CN=wbrtc"
-    time_format = initTimeFormat("YYYYMMddHHmmss")
-    time_from = times.now().format(time_format)
-    time_to = (times.now() + times.years(1)).format(time_format)
-
-  var issuer_key = self.generateKey()
-  var write_cert: mbedtls_x509write_cert
-  var serial_mpi: mbedtls_mpi
-  mb_x509write_crt_init(write_cert)
-  mb_x509write_crt_set_md_alg(write_cert, MBEDTLS_MD_SHA256);
-  mb_x509write_crt_set_subject_key(write_cert, issuer_key)
-  mb_x509write_crt_set_issuer_key(write_cert, issuer_key)
-  mb_x509write_crt_set_subject_name(write_cert, name)
-  mb_x509write_crt_set_issuer_name(write_cert, name)
-  mb_x509write_crt_set_validity(write_cert, time_from, time_to)
-  mb_x509write_crt_set_basic_constraints(write_cert, 0, -1)
-  mb_x509write_crt_set_subject_key_identifier(write_cert)
-  mb_x509write_crt_set_authority_key_identifier(write_cert)
-  mb_mpi_init(serial_mpi)
-  let serial_hex = mb_mpi_read_string(serial_mpi, 16)
-  mb_x509write_crt_set_serial(write_cert, serial_mpi)
-  let buf = mb_x509write_crt_pem(write_cert, 4096, mbedtls_ctr_drbg_random, self.ctr_drbg)
-  mb_x509_crt_parse(result, buf)
 
 proc dtlsSend*(ctx: pointer, buf: ptr byte, len: uint): cint {.cdecl.} =
   echo "Send: ", len
