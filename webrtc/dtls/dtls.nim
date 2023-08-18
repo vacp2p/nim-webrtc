@@ -33,8 +33,6 @@ type
     recvEvent: AsyncEvent
     sendEvent: AsyncEvent
 
-    entropy: mbedtls_entropy_context
-    ctr_drbg: mbedtls_ctr_drbg_context
     timer: mbedtls_timing_delay_context
 
     config: mbedtls_ssl_config
@@ -53,37 +51,9 @@ proc dtlsRecv*(ctx: pointer, buf: ptr byte, len: uint): cint {.cdecl.} =
 
 method init*(self: DtlsConn, conn: WebRTCConn, address: TransportAddress) {.async.} =
   await procCall(WebRTCConn(self).init(conn, address))
-  self.recvEvent = AsyncEvent()
-  self.sendEvent = AsyncEvent()
-
-  mb_ctr_drbg_init(self.ctr_drbg)
-  mb_entropy_init(self.entropy)
-  mb_ctr_drbg_seed(self.ctr_drbg, mbedtls_entropy_func,
-                   self.entropy, nil, 0)
-  var
-    srvcert = self.generateCertificate()
-    pkey = self.generateKey()
-    selfvar = self
-
-  mb_ssl_init(self.ssl)
-  mb_ssl_config_init(self.config)
-  mb_ssl_config_defaults(self.config, MBEDTLS_SSL_IS_SERVER,
-                         MBEDTLS_SSL_TRANSPORT_DATAGRAM,
-                         MBEDTLS_SSL_PRESET_DEFAULT)
-  mb_ssl_conf_rng(self.config, mbedtls_ctr_drbg_random, self.ctr_drbg)
-  mb_ssl_conf_read_timeout(self.config, 10000) # in milliseconds
-  mb_ssl_conf_ca_chain(self.config, srvcert.next, nil)
-  mb_ssl_conf_own_cert(self.config, srvcert, pkey)
-  mbedtls_ssl_set_timer_cb(addr self.ssl, cast[pointer](addr self.timer),
-                           mbedtls_timing_set_delay,
-                           mbedtls_timing_get_delay)
-  # cookie ?
-  mb_ssl_setup(self.ssl, self.config)
-  mb_ssl_session_reset(self.ssl)
-  mb_ssl_set_bio(self.ssl, cast[pointer](addr selfvar),
-                 dtlsSend, dtlsRecv, nil)
-  while true:
-    mb_ssl_handshake(self.ssl)
+#  self.recvEvent = AsyncEvent()
+#  self.sendEvent = AsyncEvent()
+#
 
 method write*(self: DtlsConn, msg: seq[byte]) {.async.} =
   var buf = msg
@@ -103,3 +73,67 @@ proc main {.async.} =
   await dtls.init(nil, laddr)
 
 waitFor(main())
+
+type
+  Dtls* = ref object of RootObj
+    ctr_drbg: mbedtls_ctr_drbg_context
+    entropy: mbedtls_entropy_context
+
+    address: TransportAddress
+    started: bool
+
+proc start*(self: Dtls, address: TransportAddress) =
+  if self.started:
+    warn "Already started"
+    return
+
+  self.address = address
+  self.started = true
+  mb_ctr_drbg_init(self.ctr_drbg)
+  mb_entropy_init(self.entropy)
+  mb_ctr_drbg_seed(self.ctr_drbg, mbedtls_entropy_func,
+                   self.entropy, nil, 0)
+
+proc stop*(self: Dtls) =
+  if not self.started:
+    warn "Already stopped"
+    return
+
+  self.stopped = false
+
+proc handshake(self: DtlsConn) {.async.} =
+  while self.ssl.private_state != MBEDTLS_SSL_HANDSHAKE_OVER:
+    let res = mbedtls_ssl_handshake_step(addr self.ssl)
+    if res == MBEDTLS_ERR_SSL_WANT_READ or res == MBEDTLS_ERR_SSL_WANT_READ:
+      continue
+
+proc accept*(self: Dtls, conn: WebRTCConn): DtlsConn {.async.} =
+  var
+    srvcert = self.generateCertificate()
+    pkey = self.generateKey()
+    selfvar = self
+
+  result = Dtls()
+  result.init(conn, self.address)
+  mb_ssl_init(result.ssl)
+  mb_ssl_config_init(result.config)
+  mb_ssl_config_defaults(result.config,
+                         MBEDTLS_SSL_IS_SERVER,
+                         MBEDTLS_SSL_TRANSPORT_DATAGRAM,
+                         MBEDTLS_SSL_PRESET_DEFAULT)
+  mb_ssl_conf_rng(result.config, mbedtls_ctr_drbg_random, self.ctr_drbg)
+  mb_ssl_conf_read_timeout(result.config, 10000) # in milliseconds
+  mb_ssl_conf_ca_chain(result.config, srvcert.next, nil)
+  mb_ssl_conf_own_cert(result.config, srvcert, pkey)
+  mbedtls_ssl_set_timer_cb(addr result.ssl, cast[pointer](addr result.timer),
+                           mbedtls_timing_set_delay,
+                           mbedtls_timing_get_delay)
+  # Add the cookie management (it works without, but it's more secure)
+  mb_ssl_setup(result.ssl, result.config)
+  mb_ssl_session_reset(result.ssl)
+  mb_ssl_set_bio(result.ssl, cast[pointer](result),
+                 dtlsSend, dtlsRecv, nil)
+  await result.handshake()
+
+proc dial*(self: Dtls, address: TransportAddress): DtlsConn =
+  discard
