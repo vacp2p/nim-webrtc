@@ -191,7 +191,7 @@ proc getOrCreateConnection(self: Sctp,
   self.sentAddress = address
   let connErr = self.usrsctpAwait:
     conn.sctpSocket.usrsctp_connect(cast[ptr SockAddr](addr sconn), SockLen(sizeof(sconn)))
-  doAssert 0 == connErr or errno == EINPROGRESS, ($errno) # TODO raise
+  doAssert 0 == connErr or errno == posix.EINPROGRESS, ($errno) # TODO raise
   self.connections[address] = conn
   return conn
 
@@ -308,6 +308,8 @@ proc connect*(self: Sctp,
               sctpPort: uint16 = 5000): Future[SctpConnection] {.async.} =
   trace "Connect", address
   let conn = await self.getOrCreateConnection(self.udp, address, sctpPort)
+  if conn.state == Connected:
+    return conn
   try:
     await conn.connectEvent.wait()
   except CancelledError as exc:
