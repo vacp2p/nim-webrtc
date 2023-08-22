@@ -24,14 +24,14 @@ proc mbedtls_pk_rsa*(pk: mbedtls_pk_context): ptr mbedtls_rsa_context =
     else:
       return nil
 
-proc generateKey*(random: mbedtls_ctr_drbg_context): mbedtls_pk_context =
+template generateKey*(random: mbedtls_ctr_drbg_context): mbedtls_pk_context =
   var res: mbedtls_pk_context
   mb_pk_init(res)
   discard mbedtls_pk_setup(addr res, mbedtls_pk_info_from_type(MBEDTLS_PK_RSA))
   mb_rsa_gen_key(mb_pk_rsa(res), mbedtls_ctr_drbg_random, random, 4096, 65537)
-  return res
+  res
 
-proc generateCertificate*(random: mbedtls_ctr_drbg_context): mbedtls_x509_crt =
+template generateCertificate*(random: mbedtls_ctr_drbg_context): mbedtls_x509_crt =
   let
     name = "C=FR,O=webrtc,CN=webrtc"
     time_format = initTimeFormat("YYYYMMddHHmmss")
@@ -55,4 +55,6 @@ proc generateCertificate*(random: mbedtls_ctr_drbg_context): mbedtls_x509_crt =
   let serial_hex = mb_mpi_read_string(serial_mpi, 16)
   mb_x509write_crt_set_serial(write_cert, serial_mpi)
   let buf = mb_x509write_crt_pem(write_cert, 4096, mbedtls_ctr_drbg_random, random)
-  mb_x509_crt_parse(result, buf)
+  var res: mbedtls_x509_crt
+  mb_x509_crt_parse(res, buf)
+  res

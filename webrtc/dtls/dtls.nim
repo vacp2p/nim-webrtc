@@ -7,7 +7,8 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import std/times
+import times, sequtils
+import strutils # to remove
 import chronos, chronicles
 import ./utils, ../webrtc_connection
 
@@ -40,14 +41,16 @@ type
 
 proc dtlsSend*(ctx: pointer, buf: ptr byte, len: uint): cint {.cdecl.} =
   echo "Send: ", len
-  let self = cast[ptr DtlsConn](ctx)
+  let self = cast[DtlsConn](ctx)
   self.sendEvent.fire()
 
 proc dtlsRecv*(ctx: pointer, buf: ptr byte, len: uint): cint {.cdecl.} =
-  echo "Recv: ", len
-  let self = cast[ptr DtlsConn](ctx)[]
-
-  let x = self.read()
+  var self = cast[DtlsConn](ctx)[]
+  echo "Recv: ", self.recvData[0].len(), " ", len
+  echo ctx.repr
+  result = self.recvData[0].len().cint
+  copyMem(buf, addr self.recvData[0][0], self.recvData[0].len())
+  self.recvData.delete(0..0)
 
 method init*(self: DtlsConn, conn: WebRTCConn, address: TransportAddress) {.async.} =
   await procCall(WebRTCConn(self).init(conn, address))
@@ -66,13 +69,6 @@ method read*(self: DtlsConn): Future[seq[byte]] {.async.} =
 
 method close*(self: DtlsConn) {.async.} =
   discard
-
-proc main {.async.} =
-  let laddr = initTAddress("127.0.0.1:" & "4242")
-  var dtls = DtlsConn()
-  await dtls.init(nil, laddr)
-
-waitFor(main())
 
 type
   Dtls* = ref object of RootObj
@@ -99,41 +95,75 @@ proc stop*(self: Dtls) =
     warn "Already stopped"
     return
 
-  self.stopped = false
+  self.started = false
 
 proc handshake(self: DtlsConn) {.async.} =
+  var endpoint =
+    if self.ssl.private_conf.private_endpoint == MBEDTLS_SSL_IS_SERVER:
+      MBEDTLS_ERR_SSL_WANT_READ
+    else:
+      MBEDTLS_ERR_SSL_WANT_WRITE
+
   while self.ssl.private_state != MBEDTLS_SSL_HANDSHAKE_OVER:
+    echo "State: ", toHex(self.ssl.private_state.int)
+    if endpoint == MBEDTLS_ERR_SSL_WANT_READ:
+      self.recvData.add(await self.conn.read())
+      echo "=====> ", self.recvData.len()
     let res = mbedtls_ssl_handshake_step(addr self.ssl)
-    if res == MBEDTLS_ERR_SSL_WANT_READ or res == MBEDTLS_ERR_SSL_WANT_READ:
+    echo "Result handshake step: ", (-res).toHex, " ",
+         (-MBEDTLS_ERR_SSL_WANT_READ).toHex, " ",
+         (-MBEDTLS_ERR_SSL_WANT_WRITE).toHex
+    if res == MBEDTLS_ERR_SSL_WANT_READ or res == MBEDTLS_ERR_SSL_WANT_WRITE:
+      echo if res == MBEDTLS_ERR_SSL_WANT_READ: "WANT_READ" else: "WANT_WRITE"
       continue
+    elif res != 0:
+      break # raise whatever
+    endpoint = res
 
-proc accept*(self: Dtls, conn: WebRTCConn): DtlsConn {.async.} =
+proc accept*(self: Dtls, conn: WebRTCConn): Future[DtlsConn] {.async.} =
+  echo "1"
   var
-    srvcert = self.generateCertificate()
-    pkey = self.generateKey()
+    srvcert = self.ctr_drbg.generateCertificate()
+    pkey = self.ctr_drbg.generateKey()
     selfvar = self
+    res = DtlsConn()
+  let v = cast[pointer](res)
+  echo v.repr
 
-  result = Dtls()
-  result.init(conn, self.address)
-  mb_ssl_init(result.ssl)
-  mb_ssl_config_init(result.config)
-  mb_ssl_config_defaults(result.config,
+  await res.init(conn, self.address)
+  mb_ssl_init(res.ssl)
+  mb_ssl_config_init(res.config)
+  mb_ssl_config_defaults(res.config,
                          MBEDTLS_SSL_IS_SERVER,
                          MBEDTLS_SSL_TRANSPORT_DATAGRAM,
                          MBEDTLS_SSL_PRESET_DEFAULT)
-  mb_ssl_conf_rng(result.config, mbedtls_ctr_drbg_random, self.ctr_drbg)
-  mb_ssl_conf_read_timeout(result.config, 10000) # in milliseconds
-  mb_ssl_conf_ca_chain(result.config, srvcert.next, nil)
-  mb_ssl_conf_own_cert(result.config, srvcert, pkey)
-  mbedtls_ssl_set_timer_cb(addr result.ssl, cast[pointer](addr result.timer),
+  mb_ssl_conf_rng(res.config, mbedtls_ctr_drbg_random, self.ctr_drbg)
+  mb_ssl_conf_read_timeout(res.config, 10000) # in milliseconds
+  mb_ssl_conf_ca_chain(res.config, srvcert.next, nil)
+  mb_ssl_conf_own_cert(res.config, srvcert, pkey)
+  mbedtls_ssl_set_timer_cb(addr res.ssl, cast[pointer](addr res.timer),
                            mbedtls_timing_set_delay,
                            mbedtls_timing_get_delay)
   # Add the cookie management (it works without, but it's more secure)
-  mb_ssl_setup(result.ssl, result.config)
-  mb_ssl_session_reset(result.ssl)
-  mb_ssl_set_bio(result.ssl, cast[pointer](result),
+  mb_ssl_setup(res.ssl, res.config)
+  mb_ssl_session_reset(res.ssl)
+  mb_ssl_set_bio(res.ssl, cast[pointer](res),
                  dtlsSend, dtlsRecv, nil)
-  await result.handshake()
+  await res.handshake()
+  return res
 
 proc dial*(self: Dtls, address: TransportAddress): DtlsConn =
   discard
+
+import ../udp_connection
+proc main() {.async.} =
+  let laddr = initTAddress("127.0.0.1:4433")
+  let udp = UdpConn()
+  await udp.init(nil, laddr)
+  let dtls = Dtls()
+  dtls.start(laddr)
+  echo "Before accept"
+  let x = await dtls.accept(udp)
+  echo "After accept"
+
+waitFor(main())

@@ -7,6 +7,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+import sequtils
 import chronos, chronicles
 import webrtc_connection
 
@@ -20,7 +21,7 @@ type
     recvEvent: AsyncEvent
 
 method init(self: UdpConn, conn: WebRTCConn, address: TransportAddress) {.async.} =
-  procCall(WebRTCConn(self).init(conn, address))
+  await procCall(WebRTCConn(self).init(conn, address))
 
   proc onReceive(udp: DatagramTransport, address: TransportAddress) {.async, gcsafe.} =
     let msg = udp.getMessage()
@@ -33,12 +34,12 @@ method init(self: UdpConn, conn: WebRTCConn, address: TransportAddress) {.async.
 method close(self: UdpConn) {.async.} =
   self.udp.close()
   if not self.conn.isNil():
-    self.conn.close()
+    await self.conn.close()
 
 method write(self: UdpConn, msg: seq[byte]) {.async.} =
   await self.udp.sendTo(self.address, msg)
 
-method read(self: UdpConn): seq[byte] {.async.} =
+method read(self: UdpConn): Future[seq[byte]] {.async.} =
   while self.recvData.len() <= 0:
     self.recvEvent.clear()
     await self.recvEvent.wait()
