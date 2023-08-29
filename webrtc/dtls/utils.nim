@@ -18,11 +18,11 @@ import mbedtls/md
 
 proc mbedtls_pk_rsa*(pk: mbedtls_pk_context): ptr mbedtls_rsa_context =
   var key = pk
-  case mbedtls_pk_get_type(addr key):
-    of MBEDTLS_PK_RSA:
-      return cast[ptr mbedtls_rsa_context](pk.private_pk_ctx)
-    else:
-      return nil
+  case mbedtls_pk_get_type(addr key)
+  of MBEDTLS_PK_RSA:
+    return cast[ptr mbedtls_rsa_context](pk.private_pk_ctx)
+  else:
+    return nil
 
 template generateKey*(random: mbedtls_ctr_drbg_context): mbedtls_pk_context =
   var res: mbedtls_pk_context
@@ -58,3 +58,38 @@ template generateCertificate*(random: mbedtls_ctr_drbg_context): mbedtls_x509_cr
   var res: mbedtls_x509_crt
   mb_x509_crt_parse(res, buf)
   res
+
+
+
+const mb_ssl_states* = @[ 
+  "MBEDTLS_SSL_HELLO_REQUEST",
+  "MBEDTLS_SSL_CLIENT_HELLO",
+  "MBEDTLS_SSL_SERVER_HELLO",
+  "MBEDTLS_SSL_SERVER_CERTIFICATE",
+  "MBEDTLS_SSL_SERVER_KEY_EXCHANGE",
+  "MBEDTLS_SSL_CERTIFICATE_REQUEST",
+  "MBEDTLS_SSL_SERVER_HELLO_DONE",
+  "MBEDTLS_SSL_CLIENT_CERTIFICATE",
+  "MBEDTLS_SSL_CLIENT_KEY_EXCHANGE",
+  "MBEDTLS_SSL_CERTIFICATE_VERIFY",
+  "MBEDTLS_SSL_CLIENT_CHANGE_CIPHER_SPEC",
+  "MBEDTLS_SSL_CLIENT_FINISHED",
+  "MBEDTLS_SSL_SERVER_CHANGE_CIPHER_SPEC",
+  "MBEDTLS_SSL_SERVER_FINISHED",
+  "MBEDTLS_SSL_FLUSH_BUFFERS",
+  "MBEDTLS_SSL_HANDSHAKE_WRAPUP",
+  "MBEDTLS_SSL_NEW_SESSION_TICKET",
+  "MBEDTLS_SSL_SERVER_HELLO_VERIFY_REQUEST_SENT",
+  "MBEDTLS_SSL_HELLO_RETRY_REQUEST",
+  "MBEDTLS_SSL_ENCRYPTED_EXTENSIONS",
+  "MBEDTLS_SSL_END_OF_EARLY_DATA",
+  "MBEDTLS_SSL_CLIENT_CERTIFICATE_VERIFY",
+  "MBEDTLS_SSL_CLIENT_CCS_AFTER_SERVER_FINISHED",
+  "MBEDTLS_SSL_CLIENT_CCS_BEFORE_2ND_CLIENT_HELLO",
+  "MBEDTLS_SSL_SERVER_CCS_AFTER_SERVER_HELLO",
+  "MBEDTLS_SSL_CLIENT_CCS_AFTER_CLIENT_HELLO",
+  "MBEDTLS_SSL_SERVER_CCS_AFTER_HELLO_RETRY_REQUEST",
+  "MBEDTLS_SSL_HANDSHAKE_OVER",
+  "MBEDTLS_SSL_TLS1_3_NEW_SESSION_TICKET",
+  "MBEDTLS_SSL_TLS1_3_NEW_SESSION_TICKET_FLUSH"
+]

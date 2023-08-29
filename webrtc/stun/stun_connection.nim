@@ -46,3 +46,6 @@ method read(self: StunConn): Future[seq[byte]] {.async.} =
     await self.recvEvent.wait()
   result = self.recvData[0]
   self.recvData.delete(0..0)
+
+method getRemoteAddress*(self: StunConn): TransportAddress =
+  self.conn.getRemoteAddress()

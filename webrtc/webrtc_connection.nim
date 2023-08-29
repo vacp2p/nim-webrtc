@@ -28,3 +28,6 @@ method write*(self: WebRTCConn, msg: seq[byte]) {.async, base.} =
 
 method read*(self: WebRTCConn): Future[seq[byte]] {.async, base.} =
   doAssert(false, "not implemented!")
+
+method getRemoteAddress*(self: WebRTCConn): TransportAddress {.base.} =
+  doAssert(false, "not implemented")
