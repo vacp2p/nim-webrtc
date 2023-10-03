@@ -47,7 +47,6 @@ type
     entropy: mbedtls_entropy_context
 
 proc dtlsSend*(ctx: pointer, buf: ptr byte, len: uint): cint {.cdecl.} =
-  echo "\e[36m<DTLS>\e[0;1m Send\e[0m: ", len
   var self = cast[DtlsConn](ctx)
   var toWrite = newSeq[byte](len)
   if len > 0:
@@ -57,16 +56,12 @@ proc dtlsSend*(ctx: pointer, buf: ptr byte, len: uint): cint {.cdecl.} =
 
 proc dtlsRecv*(ctx: pointer, buf: ptr byte, len: uint): cint {.cdecl.} =
   var self = cast[DtlsConn](ctx)
-  echo "\e[36m<DTLS>\e[0;1m Recv\e[0m: ", self.recvData[0].len()
   result = self.recvData[0].len().cint
   copyMem(buf, addr self.recvData[0][0], self.recvData[0].len())
   self.recvData.delete(0..0)
 
 method init*(self: DtlsConn, conn: WebRTCConn, address: TransportAddress) {.async.} =
   await procCall(WebRTCConn(self).init(conn, address))
-#  self.recvEvent = AsyncEvent()
-#  self.sendEvent = AsyncEvent()
-#
 
 method write*(self: DtlsConn, msg: seq[byte]) {.async.} =
   var buf = msg
@@ -109,38 +104,28 @@ proc handshake(self: DtlsConn) {.async.} =
       MBEDTLS_ERR_SSL_WANT_WRITE
 
   while self.ssl.private_state != MBEDTLS_SSL_HANDSHAKE_OVER:
-    echo "State: ", mb_ssl_states[self.ssl.private_state.int], "(", self.ssl.private_state, ")"
-    if endpoint == MBEDTLS_ERR_SSL_WANT_READ:
+    if endpoint == MBEDTLS_ERR_SSL_WANT_READ or
+        self.ssl.private_state == MBEDTLS_SSL_CLIENT_KEY_EXCHANGE:
       self.recvData.add(await self.conn.read())
-      echo "=====> ", self.recvData.len()
-      # TODO: Change set_client_transport_id in mbedtls.nim directly
       var ta = self.getRemoteAddress()
       case ta.family
       of AddressFamily.IPv4:
-        discard mbedtls_ssl_set_client_transport_id(addr self.ssl,
-                                            addr ta.address_v4[0],
-                                            ta.address_v4.len().uint)
-      of AddressFamily.IPv6:    
-        discard mbedtls_ssl_set_client_transport_id(addr self.ssl,
-                                            addr ta.address_v6[0],
-                                            ta.address_v6.len().uint)
-      else: discard # TODO: raise ?
+        mb_ssl_set_client_transport_id(self.ssl, ta.address_v4)
+      of AddressFamily.IPv6:
+        mb_ssl_set_client_transport_id(self.ssl, ta.address_v6)
+      else:
+        discard # TODO: raise ?
 
     self.sendFuture = nil
-    let res = mbedtls_ssl_handshake_step(addr self.ssl) # TODO: Change in mbedtls.nim
-    echo "\e[34m<Handshake>\e[0m: ", res
+    let res = mb_ssl_handshake_step(self.ssl)
     if not self.sendFuture.isNil(): await self.sendFuture
-    echo "Result handshake step: ", res.mbedtls_high_level_strerr(), "(", res, ")"
     if res == MBEDTLS_ERR_SSL_WANT_READ or res == MBEDTLS_ERR_SSL_WANT_WRITE:
-      echo if res == MBEDTLS_ERR_SSL_WANT_READ: "WANT_READ" else: "WANT_WRITE"
       continue
     elif res == MBEDTLS_ERR_SSL_HELLO_VERIFY_REQUIRED:
-      echo "hello verification requested"
       mb_ssl_session_reset(self.ssl)
       endpoint = MBEDTLS_ERR_SSL_WANT_READ
       continue
     elif res != 0:
-      echo "\e[31mRaise Whatever\e[0m"
       break # raise whatever
     endpoint = res
 
@@ -153,16 +138,15 @@ proc accept*(self: Dtls, conn: WebRTCConn): Future[DtlsConn] {.async.} =
   await res.init(conn, self.address)
   mb_ssl_init(res.ssl)
   mb_ssl_config_init(res.config)
-  mbedtls_ssl_cookie_init(addr res.cookie) # TODO: Change in mbedtls.nim
-  mbedtls_ssl_cache_init(addr res.cache) # TODO: Change in mbedtls.nim
+  mb_ssl_cookie_init(res.cookie)
+  mb_ssl_cache_init(res.cache)
 
   mb_ctr_drbg_init(res.ctr_drbg)
   mb_entropy_init(res.entropy)
   mb_ctr_drbg_seed(res.ctr_drbg, mbedtls_entropy_func, res.entropy, nil, 0)
 
-  var srvcert = res.ctr_drbg.generateCertificate()
-  echo "========> ", srvcert.version, " ", srvcert.raw.len
   var pkey = res.ctr_drbg.generateKey()
+  var srvcert = res.ctr_drbg.generateCertificate(pkey)
 
   mb_ssl_config_defaults(res.config,
                          MBEDTLS_SSL_IS_SERVER,
@@ -172,12 +156,9 @@ proc accept*(self: Dtls, conn: WebRTCConn): Future[DtlsConn] {.async.} =
   mb_ssl_conf_read_timeout(res.config, 10000) # in milliseconds
   mb_ssl_conf_ca_chain(res.config, srvcert.next, nil)
   mb_ssl_conf_own_cert(res.config, srvcert, pkey)
-  discard mbedtls_ssl_cookie_setup(addr res.cookie, mbedtls_ctr_drbg_random, addr res.ctr_drbg) # TODO: Change in mbedtls.nim
-  mbedtls_ssl_conf_dtls_cookies(addr res.config, mbedtls_ssl_cookie_write,
-                            mbedtls_ssl_cookie_check, addr res.cookie) # TODO: Change in mbedtls.nim
-  mbedtls_ssl_set_timer_cb(addr res.ssl, cast[pointer](addr res.timer),
-                           mbedtls_timing_set_delay,
-                           mbedtls_timing_get_delay)
+  mb_ssl_cookie_setup(res.cookie, mbedtls_ctr_drbg_random, res.ctr_drbg)
+  mb_ssl_conf_dtls_cookies(res.config, res.cookie)
+  mb_ssl_set_timer_cb(res.ssl, res.timer)
   # Add the cookie management (it works without, but it's more secure)
   mb_ssl_setup(res.ssl, res.config)
   mb_ssl_session_reset(res.ssl)
