@@ -8,7 +8,6 @@
 # those terms.
 
 import times, sequtils
-import strutils # to remove
 import chronos, chronicles
 import ./utils, ../webrtc_connection
 
@@ -31,6 +30,7 @@ logScope:
   topics = "webrtc dtls"
 
 type
+  DtlsError* = object of CatchableError
   DtlsConn* = ref object of WebRTCConn
     recvData: seq[seq[byte]]
     recvEvent: AsyncEvent
@@ -96,16 +96,11 @@ proc stop*(self: Dtls) =
 
   self.started = false
 
-proc handshake(self: DtlsConn) {.async.} =
-  var endpoint =
-    if self.ssl.private_conf.private_endpoint == MBEDTLS_SSL_IS_SERVER:
-      MBEDTLS_ERR_SSL_WANT_READ
-    else:
-      MBEDTLS_ERR_SSL_WANT_WRITE
+proc serverHandshake(self: DtlsConn) {.async.} =
+  var shouldRead = true
 
   while self.ssl.private_state != MBEDTLS_SSL_HANDSHAKE_OVER:
-    if endpoint == MBEDTLS_ERR_SSL_WANT_READ or
-        self.ssl.private_state == MBEDTLS_SSL_CLIENT_KEY_EXCHANGE:
+    if shouldRead:
       self.recvData.add(await self.conn.read())
       var ta = self.getRemoteAddress()
       case ta.family
@@ -114,20 +109,24 @@ proc handshake(self: DtlsConn) {.async.} =
       of AddressFamily.IPv6:
         mb_ssl_set_client_transport_id(self.ssl, ta.address_v6)
       else:
-        discard # TODO: raise ?
+        raise newException(DtlsError, "Remote address isn't an IP address")
 
     self.sendFuture = nil
     let res = mb_ssl_handshake_step(self.ssl)
+    shouldRead = false
     if not self.sendFuture.isNil(): await self.sendFuture
-    if res == MBEDTLS_ERR_SSL_WANT_READ or res == MBEDTLS_ERR_SSL_WANT_WRITE:
+    if res == MBEDTLS_ERR_SSL_WANT_WRITE:
+      continue
+    elif res == MBEDTLS_ERR_SSL_WANT_READ or
+       self.ssl.private_state == MBEDTLS_SSL_CLIENT_KEY_EXCHANGE:
+      shouldRead = true
       continue
     elif res == MBEDTLS_ERR_SSL_HELLO_VERIFY_REQUIRED:
       mb_ssl_session_reset(self.ssl)
-      endpoint = MBEDTLS_ERR_SSL_WANT_READ
+      shouldRead = true
       continue
     elif res != 0:
-      break # raise whatever
-    endpoint = res
+      raise newException(DtlsError, $(res.mbedtls_high_level_strerr()))
 
 proc accept*(self: Dtls, conn: WebRTCConn): Future[DtlsConn] {.async.} =
   var
@@ -159,12 +158,11 @@ proc accept*(self: Dtls, conn: WebRTCConn): Future[DtlsConn] {.async.} =
   mb_ssl_cookie_setup(res.cookie, mbedtls_ctr_drbg_random, res.ctr_drbg)
   mb_ssl_conf_dtls_cookies(res.config, res.cookie)
   mb_ssl_set_timer_cb(res.ssl, res.timer)
-  # Add the cookie management (it works without, but it's more secure)
   mb_ssl_setup(res.ssl, res.config)
   mb_ssl_session_reset(res.ssl)
   mb_ssl_set_bio(res.ssl, cast[pointer](res),
                  dtlsSend, dtlsRecv, nil)
-  await res.handshake()
+  await res.serverHandshake()
   return res
 
 proc dial*(self: Dtls, address: TransportAddress): DtlsConn =
