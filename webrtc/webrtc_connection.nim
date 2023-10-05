@@ -11,8 +11,8 @@ import chronos
 
 type
   WebRTCConn* = ref object of RootObj
-    conn: WebRTCConn
-    address: TransportAddress
+    conn*: WebRTCConn
+    address*: TransportAddress
     # isClosed: bool
     # isEof: bool
 
@@ -28,3 +28,6 @@ method write*(self: WebRTCConn, msg: seq[byte]) {.async, base.} =
 
 method read*(self: WebRTCConn): Future[seq[byte]] {.async, base.} =
   doAssert(false, "not implemented!")
+
+method getRemoteAddress*(self: WebRTCConn): TransportAddress {.base.} =
+  doAssert(false, "not implemented")

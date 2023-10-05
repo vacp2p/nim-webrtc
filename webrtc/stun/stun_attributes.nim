@@ -11,7 +11,7 @@ import sequtils, typetraits
 import binary_serialization,
        stew/byteutils,
        chronos
-import utils
+import ../utils
 
 type
   StunAttributeEncodingError* = object of CatchableError
