@@ -13,40 +13,33 @@ import ../udp_connection, stun
 type
   StunConn* = ref object
     conn: UdpConn
-    address: TransportAddress
-    recvData: seq[(seq[byte], TransportAddress)]
-    recvEvent: AsyncEvent
+    laddr: TransportAddress
+    dataRecv: AsyncQueue[(seq[byte], TransportAddress)]
     handlesFut: Future[void]
 
 proc handles(self: StunConn) {.async.} =
   while true: # TODO: while not self.conn.atEof()
     let (msg, address) = await self.conn.read()
     if Stun.isMessage(msg):
-      let res = Stun.getResponse(msg, self.address)
+      let res = Stun.getResponse(msg, self.laddr)
       if res.isSome():
         await self.conn.write(res.get())
     else:
-      self.recvData.add((msg, address))
-      self.recvEvent.fire()
+      self.dataRecv.addLastNoWait((msg, address))
 
-method init(self: StunConn, conn: UdpConn, address: TransportAddress) {.async.} =
+proc init(self: StunConn, conn: UdpConn, laddr: TransportAddress) {.async.} =
   self.conn = conn
-  self.address = address
+  self.laddr = laddr
 
-  self.recvEvent = newAsyncEvent()
+  self.dataRecv = newAsyncQueue()
   self.handlesFut = handles()
 
-method close(self: StunConn) {.async.} =
+proc close(self: StunConn) {.async.} =
   self.handlesFut.cancel() # check before?
   self.conn.close()
 
-method write(self: StunConn, msg: seq[byte]) {.async.} =
+proc write(self: StunConn, msg: seq[byte]) {.async.} =
   await self.conn.write(msg)
 
-method read(self: StunConn): Future[(seq[byte], TransportAddress)] {.async.} =
-  while self.recvData.len() <= 0:
-    self.recvEvent.clear()
-    await self.recvEvent.wait()
-  let res = self.recvData[0]
-  self.recvData.delete(0..0)
-  return res
+proc read(self: StunConn): Future[(seq[byte], TransportAddress)] {.async.} =
+  return await self.dataRecv.popFirst()

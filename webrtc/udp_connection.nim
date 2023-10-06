@@ -16,21 +16,19 @@ logScope:
 
 type
   UdpConn* = ref object
-    localAddress: TransportAddress
+    laddr: TransportAddress
     udp: DatagramTransport
-    recvData: seq[(seq[byte], TransportAddress)]
-    recvEvent: AsyncEvent
+    dataRecv: AsyncQueue[(seq[byte], TransportAddress)]
 
 proc init(self: UdpConn, laddr: TransportAddress) {.async.} =
-  self.localAddress = laddr
+  self.laddr = laddr
 
   proc onReceive(udp: DatagramTransport, address: TransportAddress) {.async, gcsafe.} =
     let msg = udp.getMessage()
     echo "\e[33m<UDP>\e[0;1m onReceive\e[0m: ", msg.len()
-    self.recvData.add((msg, address))
-    self.recvEvent.fire()
+    self.dataRecv.addLastNoWait((msg, address))
 
-  self.recvEvent = newAsyncEvent()
+  self.dataRecv = newAsyncQueue()
   self.udp = newDatagramTransport(onReceive, local = laddr)
 
 proc close(self: UdpConn) {.async.} =
@@ -44,8 +42,4 @@ proc write(self: UdpConn, msg: seq[byte]) {.async.} =
 
 proc read(self: UdpConn): Future[(seq[byte], TransportAddress)] {.async.} =
   echo "\e[33m<UDP>\e[0;1m read\e[0m"
-  while self.recvData.len() <= 0:
-    self.recvEvent.clear()
-    await self.recvEvent.wait()
-  result = self.recvData[0]
-  self.recvData.delete(0..0)
+  return await self.dataRecv.popFirst()
