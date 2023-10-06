@@ -8,27 +8,30 @@
 # those terms.
 
 import chronos
-import ../webrtc_connection, stun
+import ../udp_connection, stun
 
 type
-  StunConn* = ref object of WebRTCConn
-    recvData: seq[seq[byte]]
+  StunConn* = ref object
+    conn: UdpConn
+    address: TransportAddress
+    recvData: seq[(seq[byte], TransportAddress)]
     recvEvent: AsyncEvent
     handlesFut: Future[void]
 
 proc handles(self: StunConn) {.async.} =
   while true: # TODO: while not self.conn.atEof()
-    let msg = await self.conn.read()
+    let (msg, address) = await self.conn.read()
     if Stun.isMessage(msg):
       let res = Stun.getResponse(msg, self.address)
       if res.isSome():
         await self.conn.write(res.get())
     else:
-      self.recvData.add(msg)
+      self.recvData.add((msg, address))
       self.recvEvent.fire()
 
-method init(self: StunConn, conn: WebRTCConn, address: TransportAddress) {.async.} =
-  await procCall(WebRTCConn(self).init(conn, address))
+method init(self: StunConn, conn: UdpConn, address: TransportAddress) {.async.} =
+  self.conn = conn
+  self.address = address
 
   self.recvEvent = newAsyncEvent()
   self.handlesFut = handles()
@@ -40,12 +43,10 @@ method close(self: StunConn) {.async.} =
 method write(self: StunConn, msg: seq[byte]) {.async.} =
   await self.conn.write(msg)
 
-method read(self: StunConn): Future[seq[byte]] {.async.} =
+method read(self: StunConn): Future[(seq[byte], TransportAddress)] {.async.} =
   while self.recvData.len() <= 0:
     self.recvEvent.clear()
     await self.recvEvent.wait()
-  result = self.recvData[0]
+  let res = self.recvData[0]
   self.recvData.delete(0..0)
-
-method getRemoteAddress*(self: StunConn): TransportAddress =
-  self.conn.getRemoteAddress()
+  return res

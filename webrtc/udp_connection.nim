@@ -15,41 +15,37 @@ logScope:
   topics = "webrtc udp"
 
 type
-  UdpConn* = ref object of WebRTCConn
+  UdpConn* = ref object
+    localAddress: TransportAddress
     udp: DatagramTransport
-    remote: TransportAddress
-    recvData: seq[seq[byte]]
+    recvData: seq[(seq[byte], TransportAddress)]
     recvEvent: AsyncEvent
 
-method init(self: UdpConn, conn: WebRTCConn, addrss: TransportAddress) {.async.} =
-  await procCall(WebRTCConn(self).init(conn, addrss))
+proc init(self: UdpConn, laddr: TransportAddress) {.async.} =
+  self.localAddress = laddr
 
   proc onReceive(udp: DatagramTransport, address: TransportAddress) {.async, gcsafe.} =
     let msg = udp.getMessage()
-    echo "\e[33m<UDP>\e[0;1m onReceive\e[0m: ", udp.getMessage().len()
-    self.remote = address
-    self.recvData.add(msg)
+    echo "\e[33m<UDP>\e[0;1m onReceive\e[0m: ", msg.len()
+    self.recvData.add((msg, address))
     self.recvEvent.fire()
 
   self.recvEvent = newAsyncEvent()
-  self.udp = newDatagramTransport(onReceive, local = addrss)
+  self.udp = newDatagramTransport(onReceive, local = laddr)
 
-method close(self: UdpConn) {.async.} =
+proc close(self: UdpConn) {.async.} =
   self.udp.close()
   if not self.conn.isNil():
     await self.conn.close()
 
-method write(self: UdpConn, msg: seq[byte]) {.async.} =
+proc write(self: UdpConn, msg: seq[byte]) {.async.} =
   echo "\e[33m<UDP>\e[0;1m write\e[0m"
   await self.udp.sendTo(self.remote, msg)
 
-method read(self: UdpConn): Future[seq[byte]] {.async.} =
+proc read(self: UdpConn): Future[(seq[byte], TransportAddress)] {.async.} =
   echo "\e[33m<UDP>\e[0;1m read\e[0m"
   while self.recvData.len() <= 0:
     self.recvEvent.clear()
     await self.recvEvent.wait()
   result = self.recvData[0]
   self.recvData.delete(0..0)
-
-method getRemoteAddress*(self: UdpConn): TransportAddress =
-  self.remote
