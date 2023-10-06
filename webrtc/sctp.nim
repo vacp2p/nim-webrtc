@@ -24,6 +24,17 @@ type
     Connected
     Closed
 
+  SctpMessageParameters* = object
+    protocolId*: uint32
+    streamId*: uint16
+    endOfRecord*: bool
+    unordered*: bool
+
+  SctpMessage* = ref object
+    data*: seq[byte]
+    info: sctp_rcvinfo
+    params*: SctpMessageParameters
+
   SctpConnection* = ref object
     state: SctpState
     connectEvent: AsyncEvent
@@ -31,8 +42,7 @@ type
     udp: DatagramTransport
     address: TransportAddress
     sctpSocket: ptr socket
-    recvEvent: AsyncEvent
-    dataRecv: seq[byte]
+    dataRecv: AsyncQueue[SctpMessage]
 
   Sctp* = ref object
     udp: DatagramTransport
@@ -85,25 +95,43 @@ proc new(T: typedesc[SctpConnection],
     address: address,
     sctpSocket: sctpSocket,
     connectEvent: AsyncEvent(),
-    recvEvent: AsyncEvent())
+    #TODO add some limit for backpressure?
+    dataRecv: newAsyncQueue[SctpMessage]()
+  )
 
-proc read*(self: SctpConnection): Future[seq[byte]] {.async.} =
-  trace "Read"
-  if self.dataRecv.len == 0:
-    self.recvEvent.clear()
-    await self.recvEvent.wait()
-  let res = self.dataRecv
-  self.dataRecv = @[]
-  return res
+proc read*(self: SctpConnection): Future[SctpMessage] {.async.} =
+  return await self.dataRecv.popFirst()
 
-proc write*(self: SctpConnection, buf: seq[byte]) {.async.} =
+proc toFlags(params: SctpMessageParameters): uint16 =
+  if params.endOfRecord:
+    result = result or SCTP_EOR
+  if params.unordered:
+    result = result or SCTP_UNORDERED
+
+proc write*(
+    self: SctpConnection,
+    buf: seq[byte],
+    sendParams = default(SctpMessageParameters),
+    ) {.async.} =
   trace "Write", buf
   self.sctp.sentConnection = self
   self.sctp.sentAddress = self.address
-  let sendvErr = self.sctp.usrsctpAwait:
-    self.sctpSocket.usrsctp_sendv(unsafeAddr buf[0], buf.len.uint,
-                                  nil, 0, nil, 0,
-                                  SCTP_SENDV_NOINFO, 0)
+
+  let
+    (sendInfo, infoType) =
+      if sendParams != default(SctpMessageParameters):
+        (sctp_sndinfo(
+          snd_sid: sendParams.streamId,
+          #TODO endianness?
+          snd_ppid: sendParams.protocolId,
+          snd_flags: sendParams.toFlags
+        ), cuint(SCTP_SENDV_SNDINFO))
+      else:
+        (default(sctp_sndinfo), cuint(SCTP_SENDV_NOINFO))
+    sendvErr = self.sctp.usrsctpAwait:
+      self.sctpSocket.usrsctp_sendv(unsafeAddr buf[0], buf.len.uint,
+                                    nil, 0, unsafeAddr sendInfo, sizeof(sendInfo).SockLen,
+                                    infoType, 0)
 
 proc write*(self: SctpConnection, s: string) {.async.} =
   await self.write(s.toBytes())
@@ -125,17 +153,19 @@ proc handleUpcall(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
     conn.connectEvent.fire()
   elif bitand(events, SCTP_EVENT_READ) != 0:
     var
-      buffer = newSeq[byte](4096)
+      message = SctpMessage(
+        data: newSeq[byte](4096)
+      )
       address: Sockaddr_storage
       rn: sctp_recvv_rn
       addressLen = sizeof(Sockaddr_storage).SockLen
-      rnLen = sizeof(sctp_recvv_rn).SockLen
+      rnLen = sizeof(message.info).SockLen
       infotype: uint
       flags: int
-    let n = sock.usrsctp_recvv(cast[pointer](addr buffer[0]), buffer.len.uint,
+    let n = sock.usrsctp_recvv(cast[pointer](addr message.data[0]), message.data.len.uint,
                                cast[ptr SockAddr](addr address),
                                cast[ptr SockLen](addr addressLen),
-                               cast[pointer](addr rn),
+                               cast[pointer](addr message.info),
                                cast[ptr SockLen](addr rnLen),
                                cast[ptr cuint](addr infotype),
                                cast[ptr cint](addr flags))
@@ -143,11 +173,19 @@ proc handleUpcall(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
       perror("usrsctp_recvv")
       return
     elif n > 0:
+      if infotype == SCTP_RECVV_RCVINFO:
+        message.params = SctpMessageParameters(
+          #TODO endianness?
+          protocolId: message.info.rcv_ppid,
+          streamId: message.info.rcv_sid
+        )
       if bitand(flags, MSG_NOTIFICATION) != 0:
         trace "Notification received", length = n
       else:
-        conn.dataRecv = conn.dataRecv.concat(buffer[0..<n])
-        conn.recvEvent.fire()
+        try:
+          conn.dataRecv.addLastNoWait(message)
+        except AsyncQueueFullError:
+          trace "Queue full, dropping packet"
   else:
     warn "Handle Upcall unexpected event", events
 
