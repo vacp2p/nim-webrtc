@@ -10,6 +10,7 @@
 import tables, bitops, posix, strutils, sequtils
 import chronos, chronicles, stew/[ranges/ptr_arith, byteutils]
 import usrsctp
+import dtls/dtls
 
 export chronicles
 
@@ -36,6 +37,7 @@ type
     params*: SctpMessageParameters
 
   SctpConnection* = ref object
+    conn: DtlsConn
     state: SctpState
     connectEvent: AsyncEvent
     sctp: Sctp
@@ -45,8 +47,9 @@ type
     dataRecv: AsyncQueue[SctpMessage]
 
   Sctp* = ref object
+    dtls: Dtls
     udp: DatagramTransport
-    connections: Table[TransportAddress, SctpConnection]
+    #connections: Table[TransportAddress, SctpConnection]
     gotConnection: AsyncEvent
     timersHandler: Future[void]
     isServer: bool
