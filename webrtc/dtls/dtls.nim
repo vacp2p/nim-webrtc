@@ -100,9 +100,9 @@ type
 
 proc updateOrAdd(aq: AsyncQueue[(TransportAddress, seq[byte])],
                  raddr: TransportAddress, buf: seq[byte]) =
-  for (k, v) in aq.mitems():
-    if k == raddr:
-      v = buf
+  for kv in aq.mitems():
+    if kv[0] == raddr:
+      kv[1] = buf
       return
   aq.addLastNoWait((raddr, buf))
 
@@ -135,17 +135,16 @@ proc stop*(self: Dtls) =
   self.started = false
 
 proc serverHandshake(self: DtlsConn) {.async.} =
-  case self.raddr.family
-  of AddressFamily.IPv4:
-    mb_ssl_set_client_transport_id(self.ssl, self.raddr.address_v4)
-  of AddressFamily.IPv6:
-    mb_ssl_set_client_transport_id(self.ssl, self.raddr.address_v6)
-  else:
-    raise newException(DtlsError, "Remote address isn't an IP address")
-
   var shouldRead = true
   while self.ssl.private_state != MBEDTLS_SSL_HANDSHAKE_OVER:
     if shouldRead:
+      case self.raddr.family
+      of AddressFamily.IPv4:
+        mb_ssl_set_client_transport_id(self.ssl, self.raddr.address_v4)
+      of AddressFamily.IPv6:
+        mb_ssl_set_client_transport_id(self.ssl, self.raddr.address_v6)
+      else:
+        raise newException(DtlsError, "Remote address isn't an IP address")
       let tmp = await self.dataRecv.popFirst()
       self.dataRecv.addFirstNoWait(tmp)
     self.sendFuture = nil
@@ -206,6 +205,7 @@ proc accept*(self: Dtls): Future[DtlsConn] {.async.} =
       res.dataRecv.addLastNoWait(buf)
       self.connections[raddr] = res
       await res.serverHandshake()
+      break
     except CatchableError as exc:
       trace "Handshake fail", remoteAddress = raddr, error = exc.msg
       self.connections.del(raddr)
@@ -216,6 +216,7 @@ proc dial*(self: Dtls, raddr: TransportAddress): DtlsConn =
   discard
 
 import ../udp_connection
+import stew/byteutils
 proc main() {.async.} =
   let laddr = initTAddress("127.0.0.1:4433")
   let udp = UdpConn()
@@ -225,6 +226,6 @@ proc main() {.async.} =
   let dtls = Dtls()
   dtls.start(stun, laddr)
   let x = await dtls.accept()
-  echo "After accept"
+  echo "Recv: <", string.fromBytes(await x.read()), ">"
 
 waitFor(main())
