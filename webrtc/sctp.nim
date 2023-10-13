@@ -45,6 +45,7 @@ type
     state: SctpState
     connectEvent: AsyncEvent
     acceptEvent: AsyncEvent
+    readLoop: Future[void]
     sctp: Sctp
     udp: DatagramTransport
     address: TransportAddress
@@ -340,6 +341,16 @@ proc stop*(self: Sctp) {.async.} =
   discard self.usrsctpAwait usrsctp_finish()
   self.udp.close()
 
+proc readLoopProc(res: SctpConn) {.async.} =
+  while true:
+    let
+      msg = await res.conn.read()
+      data = usrsctp_dumppacket(unsafeAddr msg[0], uint(msg.len), SCTP_DUMP_INBOUND)
+    if data != nil:
+      trace "Receive connection", remoteAddress = result.conn.raddr, data = data.packetPretty()
+      usrsctp_freedumpbuffer(data)
+    usrsctp_conninput(cast[pointer](res), unsafeAddr msg[0], uint(msg.len), 0)
+
 proc accept*(self: Sctp): Future[SctpConn] {.async.} =
   if not self.isServer:
     raise newSctpError("Not a server")
@@ -354,7 +365,7 @@ proc accept*(self: Sctp): Future[SctpConn] {.async.} =
     usrsctp_freedumpbuffer(data)
   # sctp.sentAddress = raddr
   usrsctp_register_address(cast[pointer](res))
-  usrsctp_conninput(cast[pointer](res), unsafeAddr msg[0], uint(msg.len), 0)
+  res.readLoop = res.readLoopProc()
   res.acceptEvent.clear()
   await res.acceptEvent.wait()
   return res
