@@ -166,9 +166,10 @@ proc serverHandshake(self: DtlsConn) {.async.} =
       continue
     elif res != 0:
       raise newException(DtlsError, $(res.mbedtls_high_level_strerr()))
-  let remoteCert = self.ssl.mbedtls_ssl_get_peer_cert()[]
-  res.remoteCert = newSeq[byte](srvcert.raw.len)
-  copyMem(addr res.remoteCert[0], srvcert.raw.p, srvcert.raw.len)
+  var remoteCertPtr = mbedtls_ssl_get_peer_cert(addr self.ssl)
+  let remoteCert = remoteCertPtr[]
+  self.remoteCert = newSeq[byte](remoteCert.raw.len)
+  copyMem(addr self.remoteCert[0], remoteCert.raw.p, remoteCert.raw.len)
 
 proc localCertificate*(conn: DtlsConn): seq[byte] =
   conn.localCert
