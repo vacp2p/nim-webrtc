@@ -54,6 +54,9 @@ type
     ctr_drbg: mbedtls_ctr_drbg_context
     entropy: mbedtls_entropy_context
 
+    localCert: seq[byte]
+    remoteCert: seq[byte]
+
 proc dtlsSend*(ctx: pointer, buf: ptr byte, len: uint): cint {.cdecl.} =
   var self = cast[DtlsConn](ctx)
   var toWrite = newSeq[byte](len)
@@ -163,8 +166,15 @@ proc serverHandshake(self: DtlsConn) {.async.} =
       continue
     elif res != 0:
       raise newException(DtlsError, $(res.mbedtls_high_level_strerr()))
+  let remoteCert = self.ssl.mbedtls_ssl_get_peer_cert()[]
+  res.remoteCert = newSeq[byte](srvcert.raw.len)
+  copyMem(addr res.remoteCert[0], srvcert.raw.p, srvcert.raw.len)
 
-proc remoteAddress*(conn: DtlsConn): TransportAddress = conn.raddr
+proc localCertificate*(conn: DtlsConn): seq[byte] =
+  conn.localCert
+
+proc remoteCertificate*(conn: DtlsConn): seq[byte] =
+  conn.remoteCert
 
 proc accept*(self: Dtls): Future[DtlsConn] {.async.} =
   var
@@ -184,6 +194,8 @@ proc accept*(self: Dtls): Future[DtlsConn] {.async.} =
 
   var pkey = res.ctr_drbg.generateKey()
   var srvcert = res.ctr_drbg.generateCertificate(pkey)
+  res.localCert = newSeq[byte](srvcert.raw.len)
+  copyMem(addr res.localCert[0], srvcert.raw.p, srvcert.raw.len)
 
   mb_ssl_config_defaults(res.config,
                          MBEDTLS_SSL_IS_SERVER,
