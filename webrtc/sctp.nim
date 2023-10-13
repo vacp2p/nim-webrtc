@@ -357,13 +357,6 @@ proc accept*(self: Sctp): Future[SctpConn] {.async.} =
   let conn = await self.dtls.accept()
   var res = SctpConn.new(conn)
   res.conn = await self.dtls.accept()
-  let
-    msg = await res.conn.read()
-    data = usrsctp_dumppacket(unsafeAddr msg[0], uint(msg.len), SCTP_DUMP_INBOUND)
-  if data != nil:
-    trace "Receive connection", remoteAddress = res.conn.raddr, data = data.packetPretty()
-    usrsctp_freedumpbuffer(data)
-  # sctp.sentAddress = raddr
   usrsctp_register_address(cast[pointer](res))
   res.readLoop = res.readLoopProc()
   res.acceptEvent.clear()
