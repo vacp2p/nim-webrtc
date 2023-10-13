@@ -62,7 +62,7 @@ type
   #TODO handle closing
   DataChannelStream* = ref object
     id: uint16
-    conn: SctpConnection
+    conn: SctpConn
     reliability: DataChannelType
     reliabilityParameter: uint32
     receivedData: AsyncQueue[seq[byte]]
@@ -72,7 +72,7 @@ type
   DataChannelConnection* = ref object
     readLoopFut: Future[void]
     streams: Table[uint16, DataChannelStream]
-    conn: SctpConnection
+    conn: SctpConn
     incomingStreams: AsyncQueue[DataChannelStream]
 
 proc read*(stream: DataChannelStream): Future[seq[byte]] {.async.} =
@@ -197,3 +197,9 @@ proc accept*(conn: DataChannelConnection): Future[DataChannelStream] {.async.} =
   if isNil(conn.readLoopFut):
     conn.readLoopFut = conn.readLoop()
   return await conn.incomingStreams.popFirst()
+
+proc new*(_: type DataChannelConnection, conn: SctpConn): DataChannelConnection =
+  DataChannelConnection(
+    conn: conn,
+    incomingStreams: newAsyncQueue[DataChannelStream]()
+  )

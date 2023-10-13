@@ -15,13 +15,13 @@ proc sendPong(conn: SctpConn) {.async.} =
 proc main() {.async.} =
   let laddr = initTAddress("127.0.0.1:4242")
   let udp = UdpConn()
-  await udp.init(laddr)
+  udp.init(laddr)
   let stun = StunConn()
-  await stun.init(udp, laddr)
+  stun.init(udp, laddr)
   let dtls = Dtls()
   dtls.start(stun, laddr)
   let sctp = Sctp.new(dtls, laddr)
-  await sctp.listen(13)
+  sctp.listen(13)
   while true:
     let conn = await sctp.accept()
     asyncSpawn conn.sendPong()
