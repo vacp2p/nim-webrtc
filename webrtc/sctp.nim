@@ -17,6 +17,10 @@ export chronicles
 logScope:
   topics = "webrtc sctp"
 
+# TODO:
+# - Replace doAssert by a proper exception management
+# - Find a clean way to manage SCTP ports
+
 type
   SctpError* = object of CatchableError
 
@@ -36,10 +40,11 @@ type
     info: sctp_rcvinfo
     params*: SctpMessageParameters
 
-  SctpConnection* = ref object
+  SctpConn* = ref object
     conn: DtlsConn
     state: SctpState
     connectEvent: AsyncEvent
+    acceptEvent: AsyncEvent
     sctp: Sctp
     udp: DatagramTransport
     address: TransportAddress
@@ -49,14 +54,15 @@ type
   Sctp* = ref object
     dtls: Dtls
     udp: DatagramTransport
-    #connections: Table[TransportAddress, SctpConnection]
+    connections: Table[TransportAddress, SctpConn]
     gotConnection: AsyncEvent
     timersHandler: Future[void]
     isServer: bool
     sockServer: ptr socket
-    pendingConnections: seq[SctpConnection]
+    pendingConnections: seq[SctpConn]
+    pendingConnections2: Table[SockAddr, SctpConn]
     sentFuture: Future[void]
-    sentConnection: SctpConnection
+    sentConnection: SctpConn
     sentAddress: TransportAddress
 
 const
@@ -87,7 +93,7 @@ proc packetPretty(packet: cstring): string =
   else:
     result = result & ctn
 
-proc new(T: typedesc[SctpConnection],
+proc new(T: typedesc[SctpConn],
          sctp: Sctp,
          udp: DatagramTransport,
          address: TransportAddress,
@@ -102,7 +108,15 @@ proc new(T: typedesc[SctpConnection],
     dataRecv: newAsyncQueue[SctpMessage]()
   )
 
-proc read*(self: SctpConnection): Future[SctpMessage] {.async.} =
+proc new(T: typedesc[SctpConn], conn: DtlsConn): T =
+  T(conn: conn,
+    state: Connecting,
+    connectEvent: AsyncEvent(),
+    acceptEvent: AsyncEvent(),
+    dataRecv: newAsyncQueue[SctpMessage]() #TODO add some limit for backpressure?
+   )
+
+proc read*(self: SctpConn): Future[SctpMessage] {.async.} =
   return await self.dataRecv.popFirst()
 
 proc toFlags(params: SctpMessageParameters): uint16 =
@@ -112,7 +126,7 @@ proc toFlags(params: SctpMessageParameters): uint16 =
     result = result or SCTP_UNORDERED
 
 proc write*(
-    self: SctpConnection,
+    self: SctpConn,
     buf: seq[byte],
     sendParams = default(SctpMessageParameters),
     ) {.async.} =
@@ -136,16 +150,16 @@ proc write*(
                                     nil, 0, unsafeAddr sendInfo, sizeof(sendInfo).SockLen,
                                     infoType, 0)
 
-proc write*(self: SctpConnection, s: string) {.async.} =
+proc write*(self: SctpConn, s: string) {.async.} =
   await self.write(s.toBytes())
 
-proc close*(self: SctpConnection) {.async.} =
+proc close*(self: SctpConn) {.async.} =
   self.sctp.usrsctpAwait: self.sctpSocket.usrsctp_close()
 
 proc handleUpcall(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
   let
     events = usrsctp_get_events(sock)
-    conn = cast[SctpConnection](data)
+    conn = cast[SctpConn](data)
   trace "Handle Upcall", events
   if conn.state == Connecting:
     if bitand(events, SCTP_EVENT_ERROR) != 0:
@@ -194,29 +208,30 @@ proc handleUpcall(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
 
 proc handleAccept(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
   trace "Handle Accept"
+  var
+    sconn: Sockaddr_conn
+    slen: Socklen = sizeof(Sockaddr_conn).uint32
   let
     sctp = cast[Sctp](data)
-    sctpSocket = usrsctp_accept(sctp.sockServer, nil, nil)
+    sctpSocket = usrsctp_accept(sctp.sockServer, cast[ptr SockAddr](addr sconn), addr slen)
 
+  # echo cast[uint64](sconn.sconn_addr)
   doAssert 0 == sctpSocket.usrsctp_set_non_blocking(1)
-  let conn = SctpConnection.new(sctp, sctp.udp, sctp.sentAddress, sctpSocket)
-  sctp.connections[sctp.sentAddress] = conn
-  sctp.pendingConnections.add(conn)
+  let conn = cast[SctpConn](sconn.sconn_addr)
   conn.state = Connected
-  doAssert 0 == sctpSocket.usrsctp_set_upcall(handleUpcall, cast[pointer](conn))
-  sctp.gotConnection.fire()
+  conn.acceptEvent.fire()
 
 proc getOrCreateConnection(self: Sctp,
                            udp: DatagramTransport,
                            address: TransportAddress,
-                           sctpPort: uint16 = 5000): Future[SctpConnection] {.async.} =
+                           sctpPort: uint16 = 5000): Future[SctpConn] {.async.} =
                            #TODO remove the = 5000
   if self.connections.hasKey(address):
     return self.connections[address]
   trace "Create Connection", address
   let
     sctpSocket = usrsctp_socket(AF_CONN, posix.SOCK_STREAM, IPPROTO_SCTP, nil, nil, 0, nil)
-    conn = SctpConnection.new(self, udp, address, sctpSocket)
+    conn = SctpConn.new(self, udp, address, sctpSocket)
   var on: int = 1
   doAssert 0 == conn.sctpSocket.usrsctp_setsockopt(IPPROTO_SCTP,
                                                    SCTP_RECVRCVINFO,
@@ -232,7 +247,7 @@ proc getOrCreateConnection(self: Sctp,
   self.sentAddress = address
   let connErr = self.usrsctpAwait:
     conn.sctpSocket.usrsctp_connect(cast[ptr SockAddr](addr sconn), SockLen(sizeof(sconn)))
-  doAssert 0 == connErr or errno == posix.EINPROGRESS, ($errno) # TODO raise
+  doAssert 0 == connErr or errno == posix.EINPROGRESS, ($errno)
   self.connections[address] = conn
   return conn
 
@@ -262,25 +277,6 @@ proc timersHandler() {.async.} =
     await sleepAsync(500.milliseconds)
     usrsctp_handle_timers(500)
 
-proc startServer*(self: Sctp, sctpPort: uint16 = 5000) =
-  if self.isServer:
-    trace "Try to start the server twice"
-    return
-  self.isServer = true
-  doAssert 0 == usrsctp_sysctl_set_sctp_blackhole(2)
-  doAssert 0 == usrsctp_sysctl_set_sctp_no_csum_on_loopback(0)
-  let sock = usrsctp_socket(AF_CONN, posix.SOCK_STREAM, IPPROTO_SCTP, nil, nil, 0, nil)
-  var on: int = 1
-  doAssert 0 == usrsctp_set_non_blocking(sock, 1)
-  var sin: Sockaddr_in
-  sin.sin_family = posix.AF_INET.uint16
-  sin.sin_port = htons(sctpPort)
-  sin.sin_addr.s_addr = htonl(INADDR_ANY)
-  doAssert 0 == usrsctp_bind(sock, cast[ptr SockAddr](addr sin), SockLen(sizeof(Sockaddr_in)))
-  doAssert 0 >= usrsctp_listen(sock, 1)
-  doAssert 0 == sock.usrsctp_set_upcall(handleAccept, cast[pointer](self))
-  self.sockServer = sock
-
 proc stopServer*(self: Sctp) =
   if not self.isServer:
     trace "Try to close a client"
@@ -292,27 +288,38 @@ proc stopServer*(self: Sctp) =
     pc.sctpSocket.usrsctp_close()
   self.sockServer.usrsctp_close()
 
+proc new*(T: typedesc[Sctp], dtls: Dtls, laddr: TransportAddress): T =
+  let sctp = T(gotConnection: newAsyncEvent(),
+               timersHandler: timersHandler(),
+               dtls: dtls)
+
+  usrsctp_init_nothreads(laddr.port.uint16, sendCallback, printf)
+  discard usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_NONE)
+  discard usrsctp_sysctl_set_sctp_ecn_enable(1)
+  usrsctp_register_address(cast[pointer](sctp))
+  return sctp
+
 proc new*(T: typedesc[Sctp], port: uint16 = 9899): T =
   logScope: topics = "webrtc sctp"
   let sctp = T(gotConnection: newAsyncEvent())
-  proc onReceive(udp: DatagramTransport, address: TransportAddress) {.async, gcsafe.} =
+  proc onReceive(udp: DatagramTransport, raddr: TransportAddress) {.async, gcsafe.} =
     let
       msg = udp.getMessage()
       data = usrsctp_dumppacket(unsafeAddr msg[0], uint(msg.len), SCTP_DUMP_INBOUND)
     if data != nil:
       if sctp.isServer:
-        trace "onReceive (server)", data = data.packetPretty(), length = msg.len(), address
+        trace "onReceive (server)", data = data.packetPretty(), length = msg.len(), raddr
       else:
-        trace "onReceive (client)", data = data.packetPretty(), length = msg.len(), address
+        trace "onReceive (client)", data = data.packetPretty(), length = msg.len(), raddr
       usrsctp_freedumpbuffer(data)
 
     if sctp.isServer:
-      sctp.sentAddress = address
+      sctp.sentAddress = raddr
       usrsctp_conninput(cast[pointer](sctp), unsafeAddr msg[0], uint(msg.len), 0)
     else:
-      let conn = await sctp.getOrCreateConnection(udp, address)
+      let conn = await sctp.getOrCreateConnection(udp, raddr)
       sctp.sentConnection = conn
-      sctp.sentAddress = address
+      sctp.sentAddress = raddr
       usrsctp_conninput(cast[pointer](sctp), unsafeAddr msg[0], uint(msg.len), 0)
   let
     localAddr = TransportAddress(family: AddressFamily.IPv4, port: Port(port))
@@ -333,29 +340,62 @@ proc stop*(self: Sctp) {.async.} =
   discard self.usrsctpAwait usrsctp_finish()
   self.udp.close()
 
-proc listen*(self: Sctp): Future[SctpConnection] {.async.} =
+proc accept*(self: Sctp): Future[SctpConn] {.async.} =
   if not self.isServer:
     raise newSctpError("Not a server")
-  trace "Listening"
-  if self.pendingConnections.len == 0:
-    self.gotConnection.clear()
-    await self.gotConnection.wait()
-  let res = self.pendingConnections[0]
-  self.pendingConnections.delete(0)
+  let conn = await self.dtls.accept()
+  var res = SctpConn.new(conn)
+  res.conn = await self.dtls.accept()
+  let
+    msg = await res.conn.read()
+    data = usrsctp_dumppacket(unsafeAddr msg[0], uint(msg.len), SCTP_DUMP_INBOUND)
+  if data != nil:
+    trace "Receive connection", remoteAddress = res.conn.raddr, data = data.packetPretty()
+    usrsctp_freedumpbuffer(data)
+  # sctp.sentAddress = raddr
+  usrsctp_register_address(cast[pointer](res))
+  usrsctp_conninput(cast[pointer](res), unsafeAddr msg[0], uint(msg.len), 0)
+  res.acceptEvent.clear()
+  await res.acceptEvent.wait()
   return res
+
+proc listen*(self: Sctp, sctpPort: uint16 = 5000) {.async.} =
+  if self.isServer:
+    trace "Try to start the server twice"
+    return
+  self.isServer = true
+  trace "Listening", sctpPort
+  doAssert 0 == usrsctp_sysctl_set_sctp_blackhole(2)
+  doAssert 0 == usrsctp_sysctl_set_sctp_no_csum_on_loopback(0)
+  let sock = usrsctp_socket(AF_CONN, posix.SOCK_STREAM, IPPROTO_SCTP, nil, nil, 0, nil)
+  var on: int = 1
+  doAssert 0 == usrsctp_set_non_blocking(sock, 1)
+  var sin: Sockaddr_in
+  sin.sin_family = posix.AF_INET.uint16
+  sin.sin_port = htons(sctpPort)
+  sin.sin_addr.s_addr = htonl(INADDR_ANY)
+  doAssert 0 == usrsctp_bind(sock, cast[ptr SockAddr](addr sin), SockLen(sizeof(Sockaddr_in)))
+  doAssert 0 >= usrsctp_listen(sock, 1)
+  doAssert 0 == sock.usrsctp_set_upcall(handleAccept, cast[pointer](self))
+  self.sockServer = sock
 
 proc connect*(self: Sctp,
               address: TransportAddress,
-              sctpPort: uint16 = 5000): Future[SctpConnection] {.async.} =
-  trace "Connect", address
-  let conn = await self.getOrCreateConnection(self.udp, address, sctpPort)
-  if conn.state == Connected:
-    return conn
-  try:
-    await conn.connectEvent.wait()
-  except CancelledError as exc:
-    conn.sctpSocket.usrsctp_close()
-    return nil
-  if conn.state != Connected:
-    raise newSctpError("Cannot connect to " & $address)
-  return conn
+              sctpPort: uint16 = 5000): Future[SctpConn] {.async.} =
+  discard
+
+# proc connect*(self: Sctp,
+#               address: TransportAddress,
+#               sctpPort: uint16 = 5000): Future[SctpConn] {.async.} =
+#   trace "Connect", address, sctpPort
+#   let conn = await self.getOrCreateConnection(self.udp, address, sctpPort)
+#   if conn.state == Connected:
+#     return conn
+#   try:
+#     await conn.connectEvent.wait() # TODO: clear?
+#   except CancelledError as exc:
+#     conn.sctpSocket.usrsctp_close()
+#     return nil
+#   if conn.state != Connected:
+#     raise newSctpError("Cannot connect to " & $address)
+#   return conn

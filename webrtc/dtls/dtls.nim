@@ -212,20 +212,20 @@ proc accept*(self: Dtls): Future[DtlsConn] {.async.} =
       continue
   return res
 
-proc dial*(self: Dtls, raddr: TransportAddress): DtlsConn =
+proc dial*(self: Dtls, raddr: TransportAddress): Future[DtlsConn] {.async.} =
   discard
 
-import ../udp_connection
-import stew/byteutils
-proc main() {.async.} =
-  let laddr = initTAddress("127.0.0.1:4433")
-  let udp = UdpConn()
-  await udp.init(laddr)
-  let stun = StunConn()
-  await stun.init(udp, laddr)
-  let dtls = Dtls()
-  dtls.start(stun, laddr)
-  let x = await dtls.accept()
-  echo "Recv: <", string.fromBytes(await x.read()), ">"
-
-waitFor(main())
+#import ../udp_connection
+#import stew/byteutils
+#proc main() {.async.} =
+#  let laddr = initTAddress("127.0.0.1:4433")
+#  let udp = UdpConn()
+#  await udp.init(laddr)
+#  let stun = StunConn()
+#  await stun.init(udp, laddr)
+#  let dtls = Dtls()
+#  dtls.start(stun, laddr)
+#  let x = await dtls.accept()
+#  echo "Recv: <", string.fromBytes(await x.read()), ">"
+#
+#waitFor(main())
