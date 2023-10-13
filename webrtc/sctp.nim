@@ -370,7 +370,7 @@ proc accept*(self: Sctp): Future[SctpConn] {.async.} =
   await res.acceptEvent.wait()
   return res
 
-proc listen*(self: Sctp, sctpPort: uint16 = 5000) {.async.} =
+proc listen*(self: Sctp, sctpPort: uint16 = 5000) =
   if self.isServer:
     trace "Try to start the server twice"
     return

@@ -164,6 +164,8 @@ proc serverHandshake(self: DtlsConn) {.async.} =
     elif res != 0:
       raise newException(DtlsError, $(res.mbedtls_high_level_strerr()))
 
+proc remoteAddress*(conn: DtlsConn): TransportAddress = conn.raddr
+
 proc accept*(self: Dtls): Future[DtlsConn] {.async.} =
   var
     selfvar = self

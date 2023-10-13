@@ -27,7 +27,7 @@ proc handles(self: StunConn) {.async.} =
     else:
       self.dataRecv.addLastNoWait((msg, raddr))
 
-proc init*(self: StunConn, conn: UdpConn, laddr: TransportAddress) {.async.} =
+proc init*(self: StunConn, conn: UdpConn, laddr: TransportAddress) =
   self.conn = conn
   self.laddr = laddr
 

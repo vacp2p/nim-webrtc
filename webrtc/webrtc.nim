@@ -8,41 +8,34 @@
 # those terms.
 
 import chronos, chronicles
-import stun/stun
+
+import udp_connection
+import stun/stun_connection
+import dtls/dtls
+import sctp, datachannel
 
 logScope:
   topics = "webrtc"
 
-let fut = newFuture[void]()
 type
-  WebRTC* = object
-    udp: DatagramTransport
+  WebRTC* = ref object
+    udp*: UdpConn
+    stun*: StunConn
+    dtls*: Dtls
+    sctp*: Sctp
+    port: int
 
-proc new*(T: typedesc[WebRTC], port: uint16 = 42657): T =
-  logScope: topics = "webrtc"
+proc new*(T: typedesc[WebRTC], address: TransportAddress): T =
   var webrtc = T()
-  proc onReceive(udp: DatagramTransport, address: TransportAddress) {.async, gcsafe.} =
-    let
-      msg = udp.getMessage()
-    if Stun.isMessage(msg):
-      let res = Stun.getResponse(msg, address)
-      if res.isSome():
-        await udp.sendTo(address, res.get())
-
-    trace "onReceive", isStun = Stun.isMessage(msg)
-    if not fut.completed(): fut.complete()
-
-  let
-    laddr = initTAddress("127.0.0.1:" & $port)
-    udp = newDatagramTransport(onReceive, local = laddr)
-  trace "local address", laddr
-  webrtc.udp = udp
+  webrtc.udp.init(address)
+  webrtc.stun.init(webrtc.udp, address)
+  webrtc.dtls.start(webrtc.stun, address)
+  webrtc.sctp = Sctp.new(webrtc.dtls, address)
   return webrtc
-#
-#proc main {.async.} =
-#  echo "/ip4/127.0.0.1/udp/42657/webrtc/certhash/uEiDKBGpmOW3zQhiCHagHZ8igwfKNIp8rQCJWd5E5mIhGHw/p2p/12D3KooWFjMiMZLaCKEZRvMqKp5qUGduS6iBZ9RWQgYZXYtAAaPC"
-#  discard WebRTC.new()
-#  await fut
-#  await sleepAsync(10.seconds)
-#
-#waitFor(main())
+
+proc listen*(w: WebRTC) =
+  w.sctp.listen()
+
+proc accept*(w: WebRTC): Future[DataChannelConnection] {.async.} =
+  let sctpConn = await w.sctp.accept()
+  result = DataChannelConnection.new(sctpConn)
