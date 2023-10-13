@@ -26,7 +26,7 @@ type
     port: int
 
 proc new*(T: typedesc[WebRTC], address: TransportAddress): T =
-  var webrtc = T()
+  var webrtc = T(udp: UdpConn(), stun: StunConn(), dtls: Dtls())
   webrtc.udp.init(address)
   webrtc.stun.init(webrtc.udp, address)
   webrtc.dtls.start(webrtc.stun, address)

@@ -19,7 +19,7 @@ type
     udp: DatagramTransport
     dataRecv: AsyncQueue[(seq[byte], TransportAddress)]
 
-proc init*(self: UdpConn, laddr: TransportAddress) {.async.} =
+proc init*(self: UdpConn, laddr: TransportAddress) =
   self.laddr = laddr
 
   proc onReceive(udp: DatagramTransport, address: TransportAddress) {.async, gcsafe.} =
