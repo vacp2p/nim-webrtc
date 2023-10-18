@@ -100,6 +100,12 @@ type
     laddr: TransportAddress
     started: bool
     readLoop: Future[void]
+    ctr_drbg: mbedtls_ctr_drbg_context
+    entropy: mbedtls_entropy_context
+
+    serverPrivKey: mbedtls_pk_context
+    serverCert: mbedtls_x509_crt
+    localCert: seq[byte]
 
 proc updateOrAdd(aq: AsyncQueue[(TransportAddress, seq[byte])],
                  raddr: TransportAddress, buf: seq[byte]) =
@@ -128,6 +134,14 @@ proc start*(self: Dtls, conn: StunConn, laddr: TransportAddress) =
   self.laddr = laddr
   self.started = true
   self.readLoop = readLoop()
+
+  mb_ctr_drbg_init(self.ctr_drbg)
+  mb_entropy_init(self.entropy)
+  mb_ctr_drbg_seed(self.ctr_drbg, mbedtls_entropy_func, self.entropy, nil, 0)
+
+  var pkey = self.ctr_drbg.generateKey()
+  var srvcert = self.ctr_drbg.generateCertificate(pkey)
+  self.localCert = newSeq[byte](srvcert.raw.len)
 
 proc stop*(self: Dtls) =
   if not self.started:
@@ -171,17 +185,16 @@ proc serverHandshake(self: DtlsConn) {.async.} =
   self.remoteCert = newSeq[byte](remoteCert.raw.len)
   copyMem(addr self.remoteCert[0], remoteCert.raw.p, remoteCert.raw.len)
 
-proc localCertificate*(conn: DtlsConn): seq[byte] =
-  conn.localCert
-
 proc remoteCertificate*(conn: DtlsConn): seq[byte] =
   conn.remoteCert
+
+proc localCertificate*(self: Dtls): seq[byte] =
+  self.localCert
 
 proc accept*(self: Dtls): Future[DtlsConn] {.async.} =
   var
     selfvar = self
     res = DtlsConn()
-  let v = cast[pointer](res)
 
   await res.init(self.conn, self.laddr)
   mb_ssl_init(res.ssl)
@@ -189,9 +202,8 @@ proc accept*(self: Dtls): Future[DtlsConn] {.async.} =
   mb_ssl_cookie_init(res.cookie)
   mb_ssl_cache_init(res.cache)
 
-  mb_ctr_drbg_init(res.ctr_drbg)
-  mb_entropy_init(res.entropy)
-  mb_ctr_drbg_seed(res.ctr_drbg, mbedtls_entropy_func, res.entropy, nil, 0)
+  res.ctr_drbg = self.ctr_drbg
+  res.entropy = self.entropy
 
   var pkey = res.ctr_drbg.generateKey()
   var srvcert = res.ctr_drbg.generateCertificate(pkey)
