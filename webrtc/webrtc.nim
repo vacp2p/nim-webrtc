@@ -25,6 +25,9 @@ type
     sctp*: Sctp
     port: int
 
+proc dtlsLocalCertificate(w: WebRTC): seq[byte] =
+  w.dtls.localCertificate()
+
 proc new*(T: typedesc[WebRTC], address: TransportAddress): T =
   var webrtc = T(udp: UdpConn(), stun: StunConn(), dtls: Dtls())
   webrtc.udp.init(address)
