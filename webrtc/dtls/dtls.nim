@@ -139,9 +139,9 @@ proc start*(self: Dtls, conn: StunConn, laddr: TransportAddress) =
   mb_entropy_init(self.entropy)
   mb_ctr_drbg_seed(self.ctr_drbg, mbedtls_entropy_func, self.entropy, nil, 0)
 
-  var pkey = self.ctr_drbg.generateKey()
-  var srvcert = self.ctr_drbg.generateCertificate(pkey)
-  self.localCert = newSeq[byte](srvcert.raw.len)
+  self.serverPrivKey = self.ctr_drbg.generateKey()
+  self.serverCert = self.ctr_drbg.generateCertificate(self.serverPrivKey)
+  self.localCert = newSeq[byte](self.serverCert.raw.len)
 
 proc stop*(self: Dtls) =
   if not self.started:
@@ -205,10 +205,10 @@ proc accept*(self: Dtls): Future[DtlsConn] {.async.} =
   res.ctr_drbg = self.ctr_drbg
   res.entropy = self.entropy
 
-  var pkey = res.ctr_drbg.generateKey()
-  var srvcert = res.ctr_drbg.generateCertificate(pkey)
+  var pkey = self.serverPrivKey
+  var srvcert = self.serverCert
   res.localCert = newSeq[byte](srvcert.raw.len)
-  copyMem(addr res.localCert[0], srvcert.raw.p, srvcert.raw.len)
+  res.localCert = self.localCert
 
   mb_ssl_config_defaults(res.config,
                          MBEDTLS_SSL_IS_SERVER,

@@ -15,7 +15,7 @@ logScope:
 
 type
   UdpConn* = ref object
-    laddr: TransportAddress
+    laddr*: TransportAddress
     udp: DatagramTransport
     dataRecv: AsyncQueue[(seq[byte], TransportAddress)]
 
