@@ -40,7 +40,7 @@ type
   DtlsConn* = ref object
     conn: StunConn
     laddr: TransportAddress
-    raddr: TransportAddress
+    raddr*: TransportAddress
     dataRecv: AsyncQueue[seq[byte]]
     sendFuture: Future[void]
 

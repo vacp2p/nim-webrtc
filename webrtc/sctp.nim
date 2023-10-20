@@ -347,7 +347,7 @@ proc readLoopProc(res: SctpConn) {.async.} =
       msg = await res.conn.read()
       data = usrsctp_dumppacket(unsafeAddr msg[0], uint(msg.len), SCTP_DUMP_INBOUND)
     if data != nil:
-      trace "Receive connection", remoteAddress = result.conn.raddr, data = data.packetPretty()
+      trace "Receive connection", remoteAddress = res.conn.raddr, data = data.packetPretty()
       usrsctp_freedumpbuffer(data)
     usrsctp_conninput(cast[pointer](res), unsafeAddr msg[0], uint(msg.len), 0)
 
