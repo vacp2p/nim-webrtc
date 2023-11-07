@@ -142,6 +142,7 @@ proc start*(self: Dtls, conn: StunConn, laddr: TransportAddress) =
   self.serverPrivKey = self.ctr_drbg.generateKey()
   self.serverCert = self.ctr_drbg.generateCertificate(self.serverPrivKey)
   self.localCert = newSeq[byte](self.serverCert.raw.len)
+  copyMem(addr self.localCert[0], self.serverCert.raw.p, self.serverCert.raw.len)
 
 proc stop*(self: Dtls) =
   if not self.started:
@@ -180,16 +181,25 @@ proc serverHandshake(self: DtlsConn) {.async.} =
       continue
     elif res != 0:
       raise newException(DtlsError, $(res.mbedtls_high_level_strerr()))
-  var remoteCertPtr = mbedtls_ssl_get_peer_cert(addr self.ssl)
-  let remoteCert = remoteCertPtr[]
-  self.remoteCert = newSeq[byte](remoteCert.raw.len)
-  copyMem(addr self.remoteCert[0], remoteCert.raw.p, remoteCert.raw.len)
+  # var remoteCertPtr = mbedtls_ssl_get_peer_cert(addr self.ssl)
+  # let remoteCert = remoteCertPtr[]
+  # self.remoteCert = newSeq[byte](remoteCert.raw.len)
+  # copyMem(addr self.remoteCert[0], remoteCert.raw.p, remoteCert.raw.len)
 
 proc remoteCertificate*(conn: DtlsConn): seq[byte] =
   conn.remoteCert
 
 proc localCertificate*(self: Dtls): seq[byte] =
   self.localCert
+
+proc verify(ctx: pointer, pcert: ptr mbedtls_x509_crt,
+            state: cint, pflags: ptr uint32): cint {.cdecl.} =
+  var self = cast[DtlsConn](ctx)
+  let cert = pcert[]
+
+  self.remoteCert = newSeq[byte](cert.raw.len)
+  copyMem(addr self.remoteCert[0], cert.raw.p, cert.raw.len)
+  return 0
 
 proc accept*(self: Dtls): Future[DtlsConn] {.async.} =
   var
@@ -223,6 +233,7 @@ proc accept*(self: Dtls): Future[DtlsConn] {.async.} =
   mb_ssl_set_timer_cb(res.ssl, res.timer)
   mb_ssl_setup(res.ssl, res.config)
   mb_ssl_session_reset(res.ssl)
+  mbedtls_ssl_set_verify(addr res.ssl, verify, cast[pointer](res))
   mb_ssl_set_bio(res.ssl, cast[pointer](res),
                  dtlsSend, dtlsRecv, nil)
   while true:
