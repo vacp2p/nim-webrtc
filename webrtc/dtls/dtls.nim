@@ -58,6 +58,7 @@ type
     remoteCert: seq[byte]
 
 proc dtlsSend*(ctx: pointer, buf: ptr byte, len: uint): cint {.cdecl.} =
+  trace "dtls send", len
   var self = cast[DtlsConn](ctx)
   var toWrite = newSeq[byte](len)
   if len > 0:
@@ -66,6 +67,7 @@ proc dtlsSend*(ctx: pointer, buf: ptr byte, len: uint): cint {.cdecl.} =
   result = len.cint
 
 proc dtlsRecv*(ctx: pointer, buf: ptr byte, len: uint): cint {.cdecl.} =
+  trace "dtls receive", len
   var
     self = cast[DtlsConn](ctx)
     dataRecv = self.dataRecv.popFirstNoWait()
