@@ -72,7 +72,7 @@ type
   DataChannelConnection* = ref object
     readLoopFut: Future[void]
     streams: Table[uint16, DataChannelStream]
-    conn: SctpConn
+    conn*: SctpConn
     incomingStreams: AsyncQueue[DataChannelStream]
 
 proc read*(stream: DataChannelStream): Future[seq[byte]] {.async.} =

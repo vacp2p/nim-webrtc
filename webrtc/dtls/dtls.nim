@@ -67,12 +67,14 @@ proc dtlsSend*(ctx: pointer, buf: ptr byte, len: uint): cint {.cdecl.} =
   result = len.cint
 
 proc dtlsRecv*(ctx: pointer, buf: ptr byte, len: uint): cint {.cdecl.} =
-  trace "dtls receive", len
-  var
-    self = cast[DtlsConn](ctx)
-    dataRecv = self.dataRecv.popFirstNoWait()
+  let self = cast[DtlsConn](ctx)
+  if self.dataRecv.len() == 0:
+    return MBEDTLS_ERR_SSL_WANT_READ
+
+  var dataRecv = self.dataRecv.popFirstNoWait()
   copyMem(buf, addr dataRecv[0], dataRecv.len())
   result = dataRecv.len().cint
+  trace "dtls receive", len, result
 
 proc init*(self: DtlsConn, conn: StunConn, laddr: TransportAddress) {.async.} =
   self.conn = conn
@@ -85,11 +87,14 @@ proc write*(self: DtlsConn, msg: seq[byte]) {.async.} =
 
 proc read*(self: DtlsConn): Future[seq[byte]] {.async.} =
   var res = newSeq[byte](8192)
-  let tmp = await self.dataRecv.popFirst()
-  self.dataRecv.addFirstNoWait(tmp)
-  let length = mbedtls_ssl_read(addr self.ssl, cast[ptr byte](addr res[0]), res.len().uint)
-  res.setLen(length)
-  return res
+  while true:
+    let tmp = await self.dataRecv.popFirst()
+    self.dataRecv.addFirstNoWait(tmp)
+    let length = mbedtls_ssl_read(addr self.ssl, cast[ptr byte](addr res[0]), res.len().uint)
+    if length == MBEDTLS_ERR_SSL_WANT_READ:
+      continue
+    res.setLen(length)
+    return res
 
 proc close*(self: DtlsConn) {.async.} =
   discard
@@ -236,6 +241,7 @@ proc accept*(self: Dtls): Future[DtlsConn] {.async.} =
   mb_ssl_setup(res.ssl, res.config)
   mb_ssl_session_reset(res.ssl)
   mbedtls_ssl_set_verify(addr res.ssl, verify, cast[pointer](res))
+  mbedtls_ssl_conf_authmode(addr res.ssl, MBEDTLS_SSL_VERIFY_REQUIRED) # TODO: create template
   mb_ssl_set_bio(res.ssl, cast[pointer](res),
                  dtlsSend, dtlsRecv, nil)
   while true:
