@@ -241,7 +241,7 @@ proc accept*(self: Dtls): Future[DtlsConn] {.async.} =
   mb_ssl_setup(res.ssl, res.config)
   mb_ssl_session_reset(res.ssl)
   mbedtls_ssl_set_verify(addr res.ssl, verify, cast[pointer](res))
-  mbedtls_ssl_conf_authmode(addr res.ssl, MBEDTLS_SSL_VERIFY_REQUIRED) # TODO: create template
+  mbedtls_ssl_conf_authmode(addr res.config, MBEDTLS_SSL_VERIFY_REQUIRED) # TODO: create template
   mb_ssl_set_bio(res.ssl, cast[pointer](res),
                  dtlsSend, dtlsRecv, nil)
   while true:
