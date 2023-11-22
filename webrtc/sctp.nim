@@ -41,7 +41,7 @@ type
     params*: SctpMessageParameters
 
   SctpConn* = ref object
-    conn: DtlsConn
+    conn*: DtlsConn
     state: SctpState
     connectEvent: AsyncEvent
     acceptEvent: AsyncEvent
