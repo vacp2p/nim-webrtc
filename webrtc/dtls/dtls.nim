@@ -196,7 +196,10 @@ proc serverHandshake(self: DtlsConn) {.async.} =
 proc remoteCertificate*(conn: DtlsConn): seq[byte] =
   conn.remoteCert
 
-proc localCertificate*(self: DtlsConn): seq[byte] =
+proc localCertificate*(conn: DtlsConn): seq[byte] =
+  conn.localCert
+
+proc localCertificate*(self: Dtls): seq[byte] =
   self.localCert
 
 proc verify(ctx: pointer, pcert: ptr mbedtls_x509_crt,
