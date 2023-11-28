@@ -196,7 +196,7 @@ proc serverHandshake(self: DtlsConn) {.async.} =
 proc remoteCertificate*(conn: DtlsConn): seq[byte] =
   conn.remoteCert
 
-proc localCertificate*(self: Dtls): seq[byte] =
+proc localCertificate*(self: DtlsConn): seq[byte] =
   self.localCert
 
 proc verify(ctx: pointer, pcert: ptr mbedtls_x509_crt,
@@ -224,7 +224,6 @@ proc accept*(self: Dtls): Future[DtlsConn] {.async.} =
 
   var pkey = self.serverPrivKey
   var srvcert = self.serverCert
-  res.localCert = newSeq[byte](srvcert.raw.len)
   res.localCert = self.localCert
 
   mb_ssl_config_defaults(res.config,
