@@ -133,7 +133,7 @@ proc write*(
     buf: seq[byte],
     sendParams = default(SctpMessageParameters),
     ) {.async.} =
-  trace "Write", buf
+  trace "Write", buf, sctp = cast[uint64](self), sock = cast[uint64](self.sctpSocket)
   self.sctp.sentConnection = self
   self.sctp.sentAddress = self.address
 
@@ -142,7 +142,6 @@ proc write*(
       if sendParams != default(SctpMessageParameters):
         (sctp_sndinfo(
           snd_sid: sendParams.streamId,
-          #TODO endianness?
           snd_ppid: sendParams.protocolId,
           snd_flags: sendParams.toFlags
         ), cuint(SCTP_SENDV_SNDINFO))
@@ -152,6 +151,9 @@ proc write*(
       self.sctpSocket.usrsctp_sendv(unsafeAddr buf[0], buf.len.uint,
                                     nil, 0, unsafeAddr sendInfo, sizeof(sendInfo).SockLen,
                                     infoType, 0)
+  if sendvErr < 0:
+    perror("usrsctp_sendv")
+  trace "write sendv error?", sendvErr, sendParams
 
 proc write*(self: SctpConn, s: string) {.async.} =
   await self.write(s.toBytes())
@@ -161,8 +163,9 @@ proc close*(self: SctpConn) {.async.} =
 
 proc handleUpcall(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
   let
-    events = usrsctp_get_events(sock)
     conn = cast[SctpConn](data)
+    events = usrsctp_get_events(sock)
+
   trace "Handle Upcall", events
   if conn.state == Connecting:
     if bitand(events, SCTP_EVENT_ERROR) != 0:
@@ -182,6 +185,7 @@ proc handleUpcall(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
       rnLen = sizeof(message.info).SockLen
       infotype: uint
       flags: int
+    trace "recv from", sockuint64=cast[uint64](sock)
     let n = sock.usrsctp_recvv(cast[pointer](addr message.data[0]), message.data.len.uint,
                                cast[ptr SockAddr](addr address),
                                cast[ptr SockLen](addr addressLen),
@@ -206,6 +210,8 @@ proc handleUpcall(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
           conn.dataRecv.addLastNoWait(message)
         except AsyncQueueFullError:
           trace "Queue full, dropping packet"
+  elif bitand(events, SCTP_EVENT_WRITE) != 0:
+    trace "sctp event write in the upcall"
   else:
     warn "Handle Upcall unexpected event", events
 
@@ -220,7 +226,14 @@ proc handleAccept(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
 
   doAssert 0 == sctpSocket.usrsctp_set_non_blocking(1)
   let conn = cast[SctpConn](sconn.sconn_addr)
+  conn.sctpSocket = sctpSocket
   conn.state = Connected
+  var nodelay: uint32 = 1
+  doAssert 0 == conn.sctpSocket.usrsctp_set_upcall(handleUpcall, cast[pointer](conn))
+  doAssert 0 == conn.sctpSocket.usrsctp_setsockopt(IPPROTO_SCTP,
+                                               SCTP_NODELAY,
+                                               addr nodelay,
+                                               sizeof(nodelay).SockLen)
   conn.acceptEvent.fire()
 
 # proc getOrCreateConnection(self: Sctp,
@@ -347,8 +360,8 @@ proc readLoopProc(res: SctpConn) {.async.} =
       msg = await res.conn.read()
       data = usrsctp_dumppacket(unsafeAddr msg[0], uint(msg.len), SCTP_DUMP_INBOUND)
     trace "Read Loop Proc Before", isnil=data.isNil()
-    if data != nil:
-      trace "Receive connection", remoteAddress = res.conn.raddr, data = data.packetPretty()
+    if not data.isNil():
+      trace "Receive data", remoteAddress = res.conn.raddr, data = data.packetPretty()
       usrsctp_freedumpbuffer(data)
     res.sctp.sentConnection = res
     usrsctp_conninput(cast[pointer](res), unsafeAddr msg[0], uint(msg.len), 0)

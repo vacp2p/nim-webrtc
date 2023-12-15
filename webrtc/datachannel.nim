@@ -91,6 +91,7 @@ proc write*(stream: DataChannelStream, buf: seq[byte]) {.async.} =
     #TODO add reliability params
 
   if buf.len == 0:
+    trace "Datachannel write empty"
     sendInfo.protocolId = uint32(WebRtcBinaryEmpty)
     await stream.conn.write(@[0'u8], sendInfo)
   else:

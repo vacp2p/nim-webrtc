@@ -58,11 +58,11 @@ type
     remoteCert: seq[byte]
 
 proc dtlsSend*(ctx: pointer, buf: ptr byte, len: uint): cint {.cdecl.} =
-  trace "dtls send", len
   var self = cast[DtlsConn](ctx)
   var toWrite = newSeq[byte](len)
   if len > 0:
     copyMem(addr toWrite[0], buf, len)
+  trace "dtls send", len
   self.sendFuture = self.conn.write(self.raddr, toWrite)
   result = len.cint
 
@@ -82,6 +82,7 @@ proc init*(self: DtlsConn, conn: StunConn, laddr: TransportAddress) {.async.} =
   self.dataRecv = newAsyncQueue[seq[byte]]()
 
 proc write*(self: DtlsConn, msg: seq[byte]) {.async.} =
+  trace "Dtls write", length = msg.len()
   var buf = msg
   discard mbedtls_ssl_write(addr self.ssl, cast[ptr byte](addr buf[0]), buf.len().uint)
 
@@ -93,6 +94,8 @@ proc read*(self: DtlsConn): Future[seq[byte]] {.async.} =
     let length = mbedtls_ssl_read(addr self.ssl, cast[ptr byte](addr res[0]), res.len().uint)
     if length == MBEDTLS_ERR_SSL_WANT_READ:
       continue
+    if length < 0:
+      trace "dtls read", error = $(length.mbedtls_high_level_strerr())
     res.setLen(length)
     return res
 
