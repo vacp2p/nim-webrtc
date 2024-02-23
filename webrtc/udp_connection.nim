@@ -24,7 +24,7 @@ proc init*(self: UdpConn, laddr: TransportAddress) =
 
   proc onReceive(udp: DatagramTransport, address: TransportAddress) {.async, gcsafe.} =
     let msg = udp.getMessage()
-    echo "\e[33m<UDP>\e[0;1m onReceive\e[0m: ", msg.len()
+    echo "\e[33m<UDP>\e[0;1m onReceive\e[0m"
     self.dataRecv.addLastNoWait((msg, address))
 
   self.dataRecv = newAsyncQueue[(seq[byte], TransportAddress)]()

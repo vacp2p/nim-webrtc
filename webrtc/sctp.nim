@@ -8,9 +8,10 @@
 # those terms.
 
 import tables, bitops, posix, strutils, sequtils
-import chronos, chronicles, stew/[ranges/ptr_arith, byteutils]
+import chronos, chronicles, stew/[ranges/ptr_arith, byteutils, endians2]
 import usrsctp
 import dtls/dtls
+import binary_serialization
 
 export chronicles
 
@@ -37,7 +38,7 @@ type
 
   SctpMessage* = ref object
     data*: seq[byte]
-    info: sctp_rcvinfo
+    info: sctp_recvv_rn
     params*: SctpMessageParameters
 
   SctpConn* = ref object
@@ -67,6 +68,19 @@ type
     sentAddress: TransportAddress
     sentFuture: Future[void]
 
+  # Those two objects are only here for debugging purpose
+  SctpChunk = object
+    chunkType: uint8
+    flag: uint8
+    length {.bin_value: it.data.len() + 4.}: uint16
+    data {.bin_len: it.length - 4.}: seq[byte]
+
+  SctpPacketStructure = object
+    srcPort: uint16
+    dstPort: uint16
+    verifTag: uint32
+    checksum: uint32
+
 const
   IPPROTO_SCTP = 132
 
@@ -85,6 +99,19 @@ template usrsctpAwait(self: SctpConn|Sctp, body: untyped): untyped =
 
 proc perror(error: cstring) {.importc, cdecl, header: "<errno.h>".}
 proc printf(format: cstring) {.cdecl, importc: "printf", varargs, header: "<stdio.h>", gcsafe.}
+
+proc printSctpPacket(buffer: seq[byte]) =
+  let s = Binary.decode(buffer, SctpPacketStructure)
+  echo " => \e[31;1mStructure\e[0m: ", s
+  var size = sizeof(SctpPacketStructure)
+  var i = 1
+  while size < buffer.len:
+    let c = Binary.decode(buffer[size..^1], SctpChunk)
+    echo " ===> \e[32;1mChunk ", i, "\e[0m ", c
+    i.inc()
+    size.inc(c.length.int)
+    while size mod 4 != 0:
+      size.inc()
 
 proc packetPretty(packet: cstring): string =
   let data = $packet
@@ -137,22 +164,23 @@ proc write*(
   self.sctp.sentConnection = self
   self.sctp.sentAddress = self.address
 
-  let
+  var cpy = buf
+  var
     (sendInfo, infoType) =
       if sendParams != default(SctpMessageParameters):
         (sctp_sndinfo(
           snd_sid: sendParams.streamId,
-          snd_ppid: sendParams.protocolId,
+          snd_ppid: sendParams.protocolId.swapBytes(),
           snd_flags: sendParams.toFlags
         ), cuint(SCTP_SENDV_SNDINFO))
       else:
         (default(sctp_sndinfo), cuint(SCTP_SENDV_NOINFO))
     sendvErr = self.usrsctpAwait:
-      self.sctpSocket.usrsctp_sendv(unsafeAddr buf[0], buf.len.uint,
-                                    nil, 0, unsafeAddr sendInfo, sizeof(sendInfo).SockLen,
+      self.sctpSocket.usrsctp_sendv(cast[pointer](addr cpy[0]), cpy.len.uint, nil, 0,
+                                    cast[pointer](addr sendInfo), sizeof(sendInfo).SockLen,
                                     infoType, 0)
   if sendvErr < 0:
-    perror("usrsctp_sendv")
+    perror("usrsctp_sendv") # TODO: throw an exception
   trace "write sendv error?", sendvErr, sendParams
 
 proc write*(self: SctpConn, s: string) {.async.} =
@@ -182,7 +210,7 @@ proc handleUpcall(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
       address: Sockaddr_storage
       rn: sctp_recvv_rn
       addressLen = sizeof(Sockaddr_storage).SockLen
-      rnLen = sizeof(message.info).SockLen
+      rnLen = sizeof(sctp_recvv_rn).SockLen
       infotype: uint
       flags: int
     trace "recv from", sockuint64=cast[uint64](sock)
@@ -197,11 +225,12 @@ proc handleUpcall(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
       perror("usrsctp_recvv")
       return
     elif n > 0:
-      if infotype == SCTP_RECVV_RCVINFO:
-        message.params = SctpMessageParameters(
-          #TODO endianness?
-          protocolId: message.info.rcv_ppid,
-          streamId: message.info.rcv_sid
+      # It might be necessary to check if infotype == SCTP_RECVV_RCVINFO
+      message.data.delete(n..<message.data.len())
+      trace "message info from handle upcall", msginfo = message.info
+      message.params = SctpMessageParameters(
+          protocolId: message.info.recvv_rcvinfo.rcv_ppid.swapBytes(),
+          streamId: message.info.recvv_rcvinfo.rcv_sid
         )
       if bitand(flags, MSG_NOTIFICATION) != 0:
         trace "Notification received", length = n
@@ -229,11 +258,12 @@ proc handleAccept(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
   conn.sctpSocket = sctpSocket
   conn.state = Connected
   var nodelay: uint32 = 1
+  var recvinfo: uint32 = 1
   doAssert 0 == conn.sctpSocket.usrsctp_set_upcall(handleUpcall, cast[pointer](conn))
-  doAssert 0 == conn.sctpSocket.usrsctp_setsockopt(IPPROTO_SCTP,
-                                               SCTP_NODELAY,
-                                               addr nodelay,
-                                               sizeof(nodelay).SockLen)
+  doAssert 0 == conn.sctpSocket.usrsctp_setsockopt(IPPROTO_SCTP, SCTP_NODELAY,
+                                 addr nodelay, sizeof(nodelay).SockLen)
+  doAssert 0 == conn.sctpSocket.usrsctp_setsockopt(IPPROTO_SCTP, SCTP_RECVRCVINFO,
+                                 addr recvinfo, sizeof(recvinfo).SockLen)
   conn.acceptEvent.fire()
 
 # proc getOrCreateConnection(self: Sctp,
@@ -276,10 +306,11 @@ proc sendCallback(ctx: pointer,
     trace "sendCallback", data = data.packetPretty(), length
     usrsctp_freedumpbuffer(data)
   let sctpConn = cast[SctpConn](ctx)
+  let buf = @(buffer.makeOpenArray(byte, int(length)))
   proc testSend() {.async.} =
     try:
-      let buf = @(buffer.makeOpenArray(byte, int(length)))
       trace "Send To", address = sctpConn.address
+      # TODO: defined it printSctpPacket(buf)
       await sctpConn.conn.write(buf)
     except CatchableError as exc:
       trace "Send Failed", message = exc.msg
@@ -355,11 +386,9 @@ proc stop*(self: Sctp) {.async.} =
 
 proc readLoopProc(res: SctpConn) {.async.} =
   while true:
-    trace "Read Loop Proc Before"
     let
       msg = await res.conn.read()
       data = usrsctp_dumppacket(unsafeAddr msg[0], uint(msg.len), SCTP_DUMP_INBOUND)
-    trace "Read Loop Proc Before", isnil=data.isNil()
     if not data.isNil():
       trace "Receive data", remoteAddress = res.conn.raddr, data = data.packetPretty()
       usrsctp_freedumpbuffer(data)
@@ -384,6 +413,7 @@ proc listen*(self: Sctp, sctpPort: uint16 = 5000) =
   trace "Listening", sctpPort
   doAssert 0 == usrsctp_sysctl_set_sctp_blackhole(2)
   doAssert 0 == usrsctp_sysctl_set_sctp_no_csum_on_loopback(0)
+  doAssert 0 == usrsctp_sysctl_set_sctp_delayed_sack_time_default(0)
   let sock = usrsctp_socket(AF_CONN, posix.SOCK_STREAM, IPPROTO_SCTP, nil, nil, 0, nil)
   var on: int = 1
   doAssert 0 == usrsctp_set_non_blocking(sock, 1)

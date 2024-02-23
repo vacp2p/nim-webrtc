@@ -21,6 +21,7 @@ proc handles(self: StunConn) {.async.} =
   while true: # TODO: while not self.conn.atEof()
     let (msg, raddr) = await self.conn.read()
     if Stun.isMessage(msg):
+      echo "\e[35;1m<STUN>\e[0m"
       let res = Stun.getResponse(msg, self.laddr)
       if res.isSome():
         await self.conn.write(raddr, res.get())

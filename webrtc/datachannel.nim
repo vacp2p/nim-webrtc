@@ -72,13 +72,17 @@ type
   DataChannelConnection* = ref object
     readLoopFut: Future[void]
     streams: Table[uint16, DataChannelStream]
+    streamId: uint16
     conn*: SctpConn
     incomingStreams: AsyncQueue[DataChannelStream]
 
 proc read*(stream: DataChannelStream): Future[seq[byte]] {.async.} =
-  return await stream.receivedData.popLast()
+  let x = await stream.receivedData.popFirst()
+  trace "read", length=x.len(), id=stream.id
+  return x
 
 proc write*(stream: DataChannelStream, buf: seq[byte]) {.async.} =
+  trace "write", length=buf.len(), id=stream.id
   var
     sendInfo = SctpMessageParameters(
       streamId: stream.id,
@@ -105,14 +109,23 @@ proc sendControlMessage(stream: DataChannelStream, msg: DataChannelMessage) {.as
       endOfRecord: true,
       protocolId: uint32(WebRtcDcep)
     )
+  trace "send control message", msg
 
   await stream.conn.write(encoded, sendInfo)
 
 proc openStream*(
   conn: DataChannelConnection,
-  streamId: uint16,
+  noiseHandshake: bool,
   reliability = Reliable, reliabilityParameter: uint32 = 0): Future[DataChannelStream] {.async.} =
+  let streamId: uint16 =
+    if not noiseHandshake:
+      let res = conn.streamId
+      conn.streamId += 2
+      res
+    else:
+      0
 
+  trace "open stream", streamId
   if reliability in [Reliable, ReliableUnordered] and reliabilityParameter != 0:
     raise newException(ValueError, "reliabilityParameter should be 0")
 
@@ -144,6 +157,7 @@ proc openStream*(
 
 proc handleData(conn: DataChannelConnection, msg: SctpMessage) =
   let streamId = msg.params.streamId
+  trace "handle data message", streamId, ppid = msg.params.protocolId, data = msg.data
 
   if streamId notin conn.streams:
     raise newException(ValueError, "got data for unknown streamid")
@@ -162,6 +176,7 @@ proc handleControl(conn: DataChannelConnection, msg: SctpMessage) {.async.} =
     decoded = Binary.decode(msg.data, DataChannelMessage)
     streamId = msg.params.streamId
 
+  trace "handle control message", decoded, streamId = msg.params.streamId
   if decoded.messageType == Ack:
     if streamId notin conn.streams:
       raise newException(ValueError, "got ack for unknown streamid")
@@ -178,6 +193,7 @@ proc handleControl(conn: DataChannelConnection, msg: SctpMessage) {.async.} =
     )
 
     conn.streams[streamId] = stream
+    conn.incomingStreams.addLastNoWait(stream)
 
     await stream.sendControlMessage(DataChannelMessage(messageType: Ack))
 
@@ -185,6 +201,7 @@ proc readLoop(conn: DataChannelConnection) {.async.} =
   try:
     while true:
       let message = await conn.conn.read()
+      # TODO: might be necessary to check the others protocolId at some point
       if message.params.protocolId == uint32(WebRtcDcep):
         #TODO should we really await?
         await conn.handleControl(message)
@@ -195,12 +212,12 @@ proc readLoop(conn: DataChannelConnection) {.async.} =
     discard
 
 proc accept*(conn: DataChannelConnection): Future[DataChannelStream] {.async.} =
-  if isNil(conn.readLoopFut):
-    conn.readLoopFut = conn.readLoop()
   return await conn.incomingStreams.popFirst()
 
 proc new*(_: type DataChannelConnection, conn: SctpConn): DataChannelConnection =
-  DataChannelConnection(
+  result = DataChannelConnection(
     conn: conn,
-    incomingStreams: newAsyncQueue[DataChannelStream]()
+    incomingStreams: newAsyncQueue[DataChannelStream](),
+    streamId: 1'u16 # TODO: Serveur == 1, client == 2
   )
+  conn.readLoopFut = conn.readLoop()
