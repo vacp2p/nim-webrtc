@@ -398,7 +398,7 @@ proc readLoopProc(res: SctpConn) {.async.} =
 proc accept*(self: Sctp): Future[SctpConn] {.async.} =
   if not self.isServer:
     raise newSctpError("Not a server")
-  var res = SctpConn.new(await self.dtls.accept, self)
+  var res = SctpConn.new(await self.dtls.accept(), self)
   usrsctp_register_address(cast[pointer](res))
   res.readLoop = res.readLoopProc()
   res.acceptEvent.clear()
@@ -429,20 +429,21 @@ proc listen*(self: Sctp, sctpPort: uint16 = 5000) =
 proc connect*(self: Sctp,
               address: TransportAddress,
               sctpPort: uint16 = 5000): Future[SctpConn] {.async.} =
-  discard
+  let
+    sctpSocket = usrsctp_socket(AF_CONN, posix.SOCK_STREAM, IPPROTO_SCTP, nil, nil, 0, nil)
+    res = SctpConn.new(await self.dtls.connect(address), self)
 
-# proc connect*(self: Sctp,
-#               address: TransportAddress,
-#               sctpPort: uint16 = 5000): Future[SctpConn] {.async.} =
-#   trace "Connect", address, sctpPort
-#   let conn = await self.getOrCreateConnection(self.udp, address, sctpPort)
-#   if conn.state == Connected:
-#     return conn
-#   try:
-#     await conn.connectEvent.wait() # TODO: clear?
-#   except CancelledError as exc:
-#     conn.sctpSocket.usrsctp_close()
-#     return nil
-#   if conn.state != Connected:
-#     raise newSctpError("Cannot connect to " & $address)
-#   return conn
+  #usrsctp_register_address(cast[pointer](res))
+
+#  trace "Connect", address, sctpPort
+#  let conn = await self.getOrCreateConnection(self.udp, address, sctpPort)
+#  if conn.state == Connected:
+#    return conn
+#  try:
+#    await conn.connectEvent.wait() # TODO: clear?
+#  except CancelledError as exc:
+#    conn.sctpSocket.usrsctp_close()
+#    return nil
+#  if conn.state != Connected:
+#    raise newSctpError("Cannot connect to " & $address)
+#  return conn
