@@ -9,47 +9,34 @@
 
 import sequtils
 import chronos, chronicles
-import webrtc_connection
 
 logScope:
   topics = "webrtc udp"
 
 type
-  UdpConn* = ref object of WebRTCConn
+  UdpConn* = ref object
+    laddr*: TransportAddress
     udp: DatagramTransport
-    remote: TransportAddress
-    recvData: seq[seq[byte]]
-    recvEvent: AsyncEvent
+    dataRecv: AsyncQueue[(seq[byte], TransportAddress)]
 
-method init(self: UdpConn, conn: WebRTCConn, addrss: TransportAddress) {.async.} =
-  await procCall(WebRTCConn(self).init(conn, addrss))
+proc init*(self: UdpConn, laddr: TransportAddress) =
+  self.laddr = laddr
 
   proc onReceive(udp: DatagramTransport, address: TransportAddress) {.async, gcsafe.} =
     let msg = udp.getMessage()
-    echo "\e[33m<UDP>\e[0;1m onReceive\e[0m: ", udp.getMessage().len()
-    self.remote = address
-    self.recvData.add(msg)
-    self.recvEvent.fire()
+    echo "\e[33m<UDP>\e[0;1m onReceive\e[0m"
+    self.dataRecv.addLastNoWait((msg, address))
 
-  self.recvEvent = newAsyncEvent()
-  self.udp = newDatagramTransport(onReceive, local = addrss)
+  self.dataRecv = newAsyncQueue[(seq[byte], TransportAddress)]()
+  self.udp = newDatagramTransport(onReceive, local = laddr)
 
-method close(self: UdpConn) {.async.} =
+proc close*(self: UdpConn) {.async.} =
   self.udp.close()
-  if not self.conn.isNil():
-    await self.conn.close()
 
-method write(self: UdpConn, msg: seq[byte]) {.async.} =
+proc write*(self: UdpConn, raddr: TransportAddress, msg: seq[byte]) {.async.} =
   echo "\e[33m<UDP>\e[0;1m write\e[0m"
-  await self.udp.sendTo(self.remote, msg)
+  await self.udp.sendTo(raddr, msg)
 
-method read(self: UdpConn): Future[seq[byte]] {.async.} =
+proc read*(self: UdpConn): Future[(seq[byte], TransportAddress)] {.async.} =
   echo "\e[33m<UDP>\e[0;1m read\e[0m"
-  while self.recvData.len() <= 0:
-    self.recvEvent.clear()
-    await self.recvEvent.wait()
-  result = self.recvData[0]
-  self.recvData.delete(0..0)
-
-method getRemoteAddress*(self: UdpConn): TransportAddress =
-  self.remote
+  return await self.dataRecv.popFirst()

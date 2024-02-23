@@ -8,44 +8,39 @@
 # those terms.
 
 import chronos
-import ../webrtc_connection, stun
+import ../udp_connection, stun
 
 type
-  StunConn* = ref object of WebRTCConn
-    recvData: seq[seq[byte]]
-    recvEvent: AsyncEvent
+  StunConn* = ref object
+    conn: UdpConn
+    laddr: TransportAddress
+    dataRecv: AsyncQueue[(seq[byte], TransportAddress)]
     handlesFut: Future[void]
 
 proc handles(self: StunConn) {.async.} =
   while true: # TODO: while not self.conn.atEof()
-    let msg = await self.conn.read()
+    let (msg, raddr) = await self.conn.read()
     if Stun.isMessage(msg):
-      let res = Stun.getResponse(msg, self.address)
+      echo "\e[35;1m<STUN>\e[0m"
+      let res = Stun.getResponse(msg, self.laddr)
       if res.isSome():
-        await self.conn.write(res.get())
+        await self.conn.write(raddr, res.get())
     else:
-      self.recvData.add(msg)
-      self.recvEvent.fire()
+      self.dataRecv.addLastNoWait((msg, raddr))
 
-method init(self: StunConn, conn: WebRTCConn, address: TransportAddress) {.async.} =
-  await procCall(WebRTCConn(self).init(conn, address))
+proc init*(self: StunConn, conn: UdpConn, laddr: TransportAddress) =
+  self.conn = conn
+  self.laddr = laddr
 
-  self.recvEvent = newAsyncEvent()
-  self.handlesFut = handles()
+  self.dataRecv = newAsyncQueue[(seq[byte], TransportAddress)]()
+  self.handlesFut = self.handles()
 
-method close(self: StunConn) {.async.} =
+proc close*(self: StunConn) {.async.} =
   self.handlesFut.cancel() # check before?
-  self.conn.close()
+  await self.conn.close()
 
-method write(self: StunConn, msg: seq[byte]) {.async.} =
-  await self.conn.write(msg)
+proc write*(self: StunConn, raddr: TransportAddress, msg: seq[byte]) {.async.} =
+  await self.conn.write(raddr, msg)
 
-method read(self: StunConn): Future[seq[byte]] {.async.} =
-  while self.recvData.len() <= 0:
-    self.recvEvent.clear()
-    await self.recvEvent.wait()
-  result = self.recvData[0]
-  self.recvData.delete(0..0)
-
-method getRemoteAddress*(self: StunConn): TransportAddress =
-  self.conn.getRemoteAddress()
+proc read*(self: StunConn): Future[(seq[byte], TransportAddress)] {.async.} =
+  return await self.dataRecv.popFirst()
