@@ -24,7 +24,7 @@ proc init*(self: UdpConn, laddr: TransportAddress) =
 
   proc onReceive(udp: DatagramTransport, address: TransportAddress) {.async, gcsafe.} =
     let msg = udp.getMessage()
-    echo "\e[33m<UDP>\e[0;1m onReceive\e[0m"
+    trace "UDP onReceive", msg
     self.dataRecv.addLastNoWait((msg, address))
 
   self.dataRecv = newAsyncQueue[(seq[byte], TransportAddress)]()
@@ -34,9 +34,9 @@ proc close*(self: UdpConn) {.async.} =
   self.udp.close()
 
 proc write*(self: UdpConn, raddr: TransportAddress, msg: seq[byte]) {.async.} =
-  echo "\e[33m<UDP>\e[0;1m write\e[0m"
+  trace "UDP write", msg
   await self.udp.sendTo(raddr, msg)
 
 proc read*(self: UdpConn): Future[(seq[byte], TransportAddress)] {.async.} =
-  echo "\e[33m<UDP>\e[0;1m read\e[0m"
+  trace "UDP read"
   return await self.dataRecv.popFirst()

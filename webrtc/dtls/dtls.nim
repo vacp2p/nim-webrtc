@@ -82,10 +82,13 @@ proc init*(self: DtlsConn, conn: StunConn, laddr: TransportAddress) {.async.} =
   self.dataRecv = newAsyncQueue[seq[byte]]()
 
 proc write*(self: DtlsConn, msg: seq[byte]) {.async.} =
-  trace "Dtls write", length = msg.len()
   var buf = msg
-  # TODO: exception catching
-  discard mb_ssl_write(self.ssl, buf)
+  try:
+    let write = mb_ssl_write(self.ssl, buf)
+    trace "Dtls write", msgLen = msg.len(), actuallyWrote = write
+  except MbedTLSError as exc:
+    trace "Dtls write error", errorMsg = exc.msg
+    raise exc
 
 proc read*(self: DtlsConn): Future[seq[byte]] {.async.} =
   var res = newSeq[byte](8192)
@@ -97,7 +100,7 @@ proc read*(self: DtlsConn): Future[seq[byte]] {.async.} =
     if length == MBEDTLS_ERR_SSL_WANT_READ:
       continue
     if length < 0:
-      trace "dtls read", error = $(length.mbedtls_high_level_strerr())
+      trace "dtls read", error = $(length.cint.mbedtls_high_level_strerr())
     res.setLen(length)
     return res
 
@@ -164,47 +167,18 @@ proc stop*(self: Dtls) =
   self.readLoop.cancel()
   self.started = false
 
-proc serverHandshake(self: DtlsConn) {.async.} =
-  var shouldRead = true
+proc dtlsHandshake(self: DtlsConn, isServer: bool) {.async.} =
+  var shouldRead = isServer
   while self.ssl.private_state != MBEDTLS_SSL_HANDSHAKE_OVER:
     if shouldRead:
-      case self.raddr.family
-      of AddressFamily.IPv4:
-        mb_ssl_set_client_transport_id(self.ssl, self.raddr.address_v4)
-      of AddressFamily.IPv6:
-        mb_ssl_set_client_transport_id(self.ssl, self.raddr.address_v6)
-      else:
-        raise newException(DtlsError, "Remote address isn't an IP address")
-      let tmp = await self.dataRecv.popFirst()
-      self.dataRecv.addFirstNoWait(tmp)
-    self.sendFuture = nil
-    let res = mb_ssl_handshake_step(self.ssl)
-    if not self.sendFuture.isNil(): await self.sendFuture
-    shouldRead = false
-    if res == MBEDTLS_ERR_SSL_WANT_WRITE:
-      continue
-    elif res == MBEDTLS_ERR_SSL_WANT_READ or
-       self.ssl.private_state == MBEDTLS_SSL_CLIENT_KEY_EXCHANGE:
-      shouldRead = true
-      continue
-    elif res == MBEDTLS_ERR_SSL_HELLO_VERIFY_REQUIRED:
-      mb_ssl_session_reset(self.ssl)
-      shouldRead = true
-      continue
-    elif res != 0:
-      raise newException(DtlsError, $(res.mbedtls_high_level_strerr()))
-
-proc clientHandshake(self: DtlsConn) {.async.} =
-  var shouldRead = false
-  while self.ssl.private_state != MBEDTLS_SSL_HANDSHAKE_OVER:
-    if shouldRead:
-      case self.raddr.family
-      of AddressFamily.IPv4:
-        mb_ssl_set_client_transport_id(self.ssl, self.raddr.address_v4)
-      of AddressFamily.IPv6:
-        mb_ssl_set_client_transport_id(self.ssl, self.raddr.address_v6)
-      else:
-        raise newException(DtlsError, "Remote address isn't an IP address")
+      if isServer:
+        case self.raddr.family
+        of AddressFamily.IPv4:
+          mb_ssl_set_client_transport_id(self.ssl, self.raddr.address_v4)
+        of AddressFamily.IPv6:
+          mb_ssl_set_client_transport_id(self.ssl, self.raddr.address_v6)
+        else:
+          raise newException(DtlsError, "Remote address isn't an IP address")
       let tmp = await self.dataRecv.popFirst()
       self.dataRecv.addFirstNoWait(tmp)
     self.sendFuture = nil
@@ -214,8 +188,6 @@ proc clientHandshake(self: DtlsConn) {.async.} =
     if res == MBEDTLS_ERR_SSL_WANT_WRITE:
       continue
     elif res == MBEDTLS_ERR_SSL_WANT_READ:
-    # or self.ssl.private_state == MBEDTLS_SSL_SERVER_KEY_EXCHANGE:
-    # TODO: Might need to check directly on mbedtls C source
       shouldRead = true
       continue
     elif res == MBEDTLS_ERR_SSL_HELLO_VERIFY_REQUIRED:
@@ -284,7 +256,7 @@ proc accept*(self: Dtls): Future[DtlsConn] {.async.} =
       res.raddr = raddr
       res.dataRecv.addLastNoWait(buf)
       self.connections[raddr] = res
-      await res.serverHandshake()
+      await res.dtlsHandshake(true)
       break
     except CatchableError as exc:
       trace "Handshake fail", remoteAddress = raddr, error = exc.msg
@@ -300,6 +272,9 @@ proc connect*(self: Dtls, raddr: TransportAddress): Future[DtlsConn] {.async.} =
   await res.init(self.conn, self.laddr)
   mb_ssl_init(res.ssl)
   mb_ssl_config_init(res.config)
+
+  res.ctr_drbg = self.ctr_drbg
+  res.entropy = self.entropy
 
   var pkey = res.ctr_drbg.generateKey()
   var srvcert = res.ctr_drbg.generateCertificate(pkey)
@@ -321,14 +296,13 @@ proc connect*(self: Dtls, raddr: TransportAddress): Future[DtlsConn] {.async.} =
   mb_ssl_setup(res.ssl, res.config)
   mb_ssl_set_verify(res.ssl, verify, res)
   mb_ssl_conf_authmode(res.config, MBEDTLS_SSL_VERIFY_OPTIONAL)
-  mb_ssl_set_bio(res.ssl, cast[pointer](res),
-                 dtlsSend, dtlsRecv, nil)
+  mb_ssl_set_bio(res.ssl, cast[pointer](res), dtlsSend, dtlsRecv, nil)
 
   res.raddr = raddr
   self.connections[raddr] = res
 
   try:
-    await res.clientHandshake()
+    await res.dtlsHandshake(false)
   except CatchableError as exc:
     trace "Handshake fail", remoteAddress = raddr, error = exc.msg
     self.connections.del(raddr)

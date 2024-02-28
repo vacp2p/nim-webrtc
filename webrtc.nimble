@@ -11,6 +11,5 @@ requires "nim >= 1.2.0",
          "https://github.com/status-im/nim-binary-serialization.git",
          "https://github.com/status-im/nim-mbedtls.git"
 
-
 proc runTest(filename: string) =
   discard
