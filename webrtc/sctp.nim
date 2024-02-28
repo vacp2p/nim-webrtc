@@ -64,7 +64,6 @@ type
     sockServer: ptr socket
     pendingConnections: seq[SctpConn]
     pendingConnections2: Table[SockAddr, SctpConn]
-    sentConnection: SctpConn
     sentAddress: TransportAddress
     sentFuture: Future[void]
 
@@ -161,24 +160,23 @@ proc write*(
     sendParams = default(SctpMessageParameters),
     ) {.async.} =
   trace "Write", buf, sctp = cast[uint64](self), sock = cast[uint64](self.sctpSocket)
-  self.sctp.sentConnection = self
   self.sctp.sentAddress = self.address
 
   var cpy = buf
-  var
-    (sendInfo, infoType) =
-      if sendParams != default(SctpMessageParameters):
-        (sctp_sndinfo(
-          snd_sid: sendParams.streamId,
-          snd_ppid: sendParams.protocolId.swapBytes(),
-          snd_flags: sendParams.toFlags
-        ), cuint(SCTP_SENDV_SNDINFO))
-      else:
-        (default(sctp_sndinfo), cuint(SCTP_SENDV_NOINFO))
-    sendvErr = self.usrsctpAwait:
-      self.sctpSocket.usrsctp_sendv(cast[pointer](addr cpy[0]), cpy.len.uint, nil, 0,
-                                    cast[pointer](addr sendInfo), sizeof(sendInfo).SockLen,
-                                    infoType, 0)
+  let sendvErr =
+    if sendParams == default(SctpMessageParameters):
+      self.usrsctpAwait:
+        self.sctpSocket.usrsctp_sendv(cast[pointer](addr cpy[0]), cpy.len().uint, nil, 0,
+                                      nil, 0, SCTP_SENDV_NOINFO.cuint, 0)
+    else:
+      let sendInfo = sctp_sndinfo(
+        snd_sid: sendParams.streamId,
+        snd_ppid: sendParams.protocolId.swapBytes(),
+        snd_flags: sendParams.toFlags)
+      self.usrsctpAwait:
+        self.sctpSocket.usrsctp_sendv(cast[pointer](addr cpy[0]), cpy.len().uint, nil, 0,
+                                      cast[pointer](addr sendInfo), sizeof(sendInfo).SockLen,
+                                      SCTP_SENDV_SNDINFO.cuint, 0)
   if sendvErr < 0:
     perror("usrsctp_sendv") # TODO: throw an exception
   trace "write sendv error?", sendvErr, sendParams
@@ -194,7 +192,7 @@ proc handleUpcall(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
     conn = cast[SctpConn](data)
     events = usrsctp_get_events(sock)
 
-  trace "Handle Upcall", events
+  trace "Handle Upcall", events, state = conn.state
   if conn.state == Connecting:
     if bitand(events, SCTP_EVENT_ERROR) != 0:
       warn "Cannot connect", address = conn.address
@@ -202,7 +200,8 @@ proc handleUpcall(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
     elif bitand(events, SCTP_EVENT_WRITE) != 0:
       conn.state = Connected
     conn.connectEvent.fire()
-  elif bitand(events, SCTP_EVENT_READ) != 0:
+
+  if bitand(events, SCTP_EVENT_READ) != 0:
     var
       message = SctpMessage(
         data: newSeq[byte](4096)
@@ -251,50 +250,21 @@ proc handleAccept(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
     slen: Socklen = sizeof(Sockaddr_conn).uint32
   let
     sctp = cast[Sctp](data)
+    # TODO: check if sctpSocket != nil
     sctpSocket = usrsctp_accept(sctp.sockServer, cast[ptr SockAddr](addr sconn), addr slen)
 
-  doAssert 0 == sctpSocket.usrsctp_set_non_blocking(1)
   let conn = cast[SctpConn](sconn.sconn_addr)
   conn.sctpSocket = sctpSocket
   conn.state = Connected
   var nodelay: uint32 = 1
   var recvinfo: uint32 = 1
+  doAssert 0 == sctpSocket.usrsctp_set_non_blocking(1)
   doAssert 0 == conn.sctpSocket.usrsctp_set_upcall(handleUpcall, cast[pointer](conn))
   doAssert 0 == conn.sctpSocket.usrsctp_setsockopt(IPPROTO_SCTP, SCTP_NODELAY,
                                  addr nodelay, sizeof(nodelay).SockLen)
   doAssert 0 == conn.sctpSocket.usrsctp_setsockopt(IPPROTO_SCTP, SCTP_RECVRCVINFO,
                                  addr recvinfo, sizeof(recvinfo).SockLen)
   conn.acceptEvent.fire()
-
-# proc getOrCreateConnection(self: Sctp,
-#                            udp: DatagramTransport,
-#                            address: TransportAddress,
-#                            sctpPort: uint16 = 5000): Future[SctpConn] {.async.} =
-#                            #TODO remove the = 5000
-#   if self.connections.hasKey(address):
-#     return self.connections[address]
-#   trace "Create Connection", address
-#   let
-#     sctpSocket = usrsctp_socket(AF_CONN, posix.SOCK_STREAM, IPPROTO_SCTP, nil, nil, 0, nil)
-#     conn = SctpConn.new(self, udp, address, sctpSocket)
-#   var on: int = 1
-#   doAssert 0 == conn.sctpSocket.usrsctp_setsockopt(IPPROTO_SCTP,
-#                                                    SCTP_RECVRCVINFO,
-#                                                    addr on,
-#                                                    sizeof(on).SockLen)
-#   doAssert 0 == usrsctp_set_non_blocking(conn.sctpSocket, 1)
-#   doAssert 0 == usrsctp_set_upcall(conn.sctpSocket, handleUpcall, cast[pointer](conn))
-#   var sconn: Sockaddr_conn
-#   sconn.sconn_family = AF_CONN
-#   sconn.sconn_port = htons(sctpPort)
-#   sconn.sconn_addr = cast[pointer](self)
-#   self.sentConnection = conn
-#   self.sentAddress = address
-#   let connErr = self.usrsctpAwait:
-#     conn.sctpSocket.usrsctp_connect(cast[ptr SockAddr](addr sconn), SockLen(sizeof(sconn)))
-#   doAssert 0 == connErr or errno == posix.EINPROGRESS, ($errno)
-#   self.connections[address] = conn
-#   return conn
 
 proc sendCallback(ctx: pointer,
                   buffer: pointer,
@@ -310,6 +280,7 @@ proc sendCallback(ctx: pointer,
   proc testSend() {.async.} =
     try:
       trace "Send To", address = sctpConn.address
+      # printSctpPacket(buf)
       # TODO: defined it printSctpPacket(buf)
       await sctpConn.conn.write(buf)
     except CatchableError as exc:
@@ -343,43 +314,6 @@ proc new*(T: typedesc[Sctp], dtls: Dtls, laddr: TransportAddress): T =
   usrsctp_register_address(cast[pointer](sctp))
   return sctp
 
-#proc new*(T: typedesc[Sctp], port: uint16 = 9899): T =
-#  logScope: topics = "webrtc sctp"
-#  let sctp = T(gotConnection: newAsyncEvent())
-#  proc onReceive(udp: DatagramTransport, raddr: TransportAddress) {.async, gcsafe.} =
-#    let
-#      msg = udp.getMessage()
-#      data = usrsctp_dumppacket(unsafeAddr msg[0], uint(msg.len), SCTP_DUMP_INBOUND)
-#    if data != nil:
-#      if sctp.isServer:
-#        trace "onReceive (server)", data = data.packetPretty(), length = msg.len(), raddr
-#      else:
-#        trace "onReceive (client)", data = data.packetPretty(), length = msg.len(), raddr
-#      usrsctp_freedumpbuffer(data)
-#
-#    if sctp.isServer:
-#      sctp.sentAddress = raddr
-#      usrsctp_conninput(cast[pointer](sctp), unsafeAddr msg[0], uint(msg.len), 0)
-#    else:
-#      let conn = await sctp.getOrCreateConnection(udp, raddr)
-#      sctp.sentConnection = conn
-#      sctp.sentAddress = raddr
-#      usrsctp_conninput(cast[pointer](sctp), unsafeAddr msg[0], uint(msg.len), 0)
-#  let
-#    localAddr = TransportAddress(family: AddressFamily.IPv4, port: Port(port))
-#    laddr = initTAddress("127.0.0.1:" & $port)
-#    udp = newDatagramTransport(onReceive, local = laddr)
-#  trace "local address", localAddr, laddr
-#  sctp.udp = udp
-#  sctp.timersHandler = timersHandler()
-#
-#  usrsctp_init_nothreads(port, sendCallback, printf)
-#  discard usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_NONE)
-#  discard usrsctp_sysctl_set_sctp_ecn_enable(1)
-#  usrsctp_register_address(cast[pointer](sctp))
-#
-#  return sctp
-
 proc stop*(self: Sctp) {.async.} =
   discard self.usrsctpAwait usrsctp_finish()
   self.udp.close()
@@ -392,13 +326,13 @@ proc readLoopProc(res: SctpConn) {.async.} =
     if not data.isNil():
       trace "Receive data", remoteAddress = res.conn.raddr, data = data.packetPretty()
       usrsctp_freedumpbuffer(data)
-    res.sctp.sentConnection = res
+    # printSctpPacket(msg) TODO: defined it
     usrsctp_conninput(cast[pointer](res), unsafeAddr msg[0], uint(msg.len), 0)
 
 proc accept*(self: Sctp): Future[SctpConn] {.async.} =
   if not self.isServer:
     raise newSctpError("Not a server")
-  var res = SctpConn.new(await self.dtls.accept, self)
+  var res = SctpConn.new(await self.dtls.accept(), self)
   usrsctp_register_address(cast[pointer](res))
   res.readLoop = res.readLoopProc()
   res.acceptEvent.clear()
@@ -429,20 +363,34 @@ proc listen*(self: Sctp, sctpPort: uint16 = 5000) =
 proc connect*(self: Sctp,
               address: TransportAddress,
               sctpPort: uint16 = 5000): Future[SctpConn] {.async.} =
-  discard
+  let
+    sctpSocket = usrsctp_socket(AF_CONN, posix.SOCK_STREAM, IPPROTO_SCTP, nil, nil, 0, nil)
+    conn = SctpConn.new(await self.dtls.connect(address), self)
 
-# proc connect*(self: Sctp,
-#               address: TransportAddress,
-#               sctpPort: uint16 = 5000): Future[SctpConn] {.async.} =
-#   trace "Connect", address, sctpPort
-#   let conn = await self.getOrCreateConnection(self.udp, address, sctpPort)
-#   if conn.state == Connected:
-#     return conn
-#   try:
-#     await conn.connectEvent.wait() # TODO: clear?
-#   except CancelledError as exc:
-#     conn.sctpSocket.usrsctp_close()
-#     return nil
-#   if conn.state != Connected:
-#     raise newSctpError("Cannot connect to " & $address)
-#   return conn
+  trace "Create Connection", address
+  conn.sctpSocket = sctpSocket
+  conn.state = Connected
+  var nodelay: uint32 = 1
+  var recvinfo: uint32 = 1
+  doAssert 0 == usrsctp_set_non_blocking(conn.sctpSocket, 1)
+  doAssert 0 == usrsctp_set_upcall(conn.sctpSocket, handleUpcall, cast[pointer](conn))
+  doAssert 0 == conn.sctpSocket.usrsctp_setsockopt(IPPROTO_SCTP, SCTP_NODELAY,
+                                 addr nodelay, sizeof(nodelay).SockLen)
+  doAssert 0 == conn.sctpSocket.usrsctp_setsockopt(IPPROTO_SCTP, SCTP_RECVRCVINFO,
+                                 addr recvinfo, sizeof(recvinfo).SockLen)
+  var sconn: Sockaddr_conn
+  sconn.sconn_family = AF_CONN
+  sconn.sconn_port = htons(sctpPort)
+  sconn.sconn_addr = cast[pointer](conn)
+  self.sentAddress = address
+  usrsctp_register_address(cast[pointer](conn))
+  conn.readLoop = conn.readLoopProc()
+  let connErr = self.usrsctpAwait:
+    conn.sctpSocket.usrsctp_connect(cast[ptr SockAddr](addr sconn), SockLen(sizeof(sconn)))
+  doAssert 0 == connErr or errno == posix.EINPROGRESS, ($errno)
+  conn.state = Connecting
+  conn.connectEvent.clear()
+  await conn.connectEvent.wait()
+  # TODO: check connection state, if closed throw some exception I guess
+  self.connections[address] = conn
+  return conn
