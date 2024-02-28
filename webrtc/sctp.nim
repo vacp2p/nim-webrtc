@@ -250,6 +250,7 @@ proc handleAccept(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
     slen: Socklen = sizeof(Sockaddr_conn).uint32
   let
     sctp = cast[Sctp](data)
+    # TODO: check if sctpSocket != nil
     sctpSocket = usrsctp_accept(sctp.sockServer, cast[ptr SockAddr](addr sconn), addr slen)
 
   let conn = cast[SctpConn](sconn.sconn_addr)
