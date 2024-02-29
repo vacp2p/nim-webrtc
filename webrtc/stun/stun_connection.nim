@@ -18,7 +18,7 @@ type
     handlesFut: Future[void]
 
 proc handles(self: StunConn) {.async.} =
-  while true: # TODO: while not self.conn.atEof()
+  while true:
     let (msg, raddr) = await self.conn.read()
     if Stun.isMessage(msg):
       let res = Stun.getResponse(msg, self.laddr)
