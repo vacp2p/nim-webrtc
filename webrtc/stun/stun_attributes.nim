@@ -7,14 +7,61 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import sequtils, typetraits
+import std/sha1, sequtils, typetraits, std/md5
 import binary_serialization,
        stew/byteutils,
        chronos
 import ../utils
 
-type
-  StunAttributeEncodingError* = object of CatchableError
+# -- Utils --
+
+proc createCrc32Table(): array[0..255, uint32] =
+  for i in 0..255:
+    var rem = i.uint32
+    for j in 0..7:
+      if (rem and 1) > 0:
+        rem = (rem shr 1) xor 0xedb88320'u32
+      else:
+        rem = rem shr 1
+    result[i] = rem
+
+proc crc32(s: seq[byte]): uint32 =
+  # CRC-32 is used for the fingerprint attribute
+  # See https://datatracker.ietf.org/doc/html/rfc5389#section-15.5
+  const crc32table = createCrc32Table()
+  result = 0xffffffff'u32
+  for c in s:
+    result = (result shr 8) xor crc32table[(result and 0xff) xor c]
+  result = not result
+
+proc hmacSha1(key: seq[byte], msg: seq[byte]): seq[byte] =
+  # HMAC-SHA1 is used for the message integrity attribute
+  # See https://datatracker.ietf.org/doc/html/rfc5389#section-15.4
+  let
+    keyPadded =
+      if len(key) > 64:
+        @(secureHash(key.mapIt(it.chr)).distinctBase)
+      elif key.len() < 64:
+        key.concat(newSeq[byte](64 - key.len()))
+      else:
+        key
+    innerHash = keyPadded.
+                  mapIt(it xor 0x36'u8).
+                  concat(msg).
+                  mapIt(it.chr).
+                  secureHash()
+    outerHash = keyPadded.
+                  mapIt(it xor 0x5c'u8).
+                  concat(@(innerHash.distinctBase)).
+                  mapIt(it.chr).
+                  secureHash()
+  return @(outerHash.distinctBase)
+
+# -- Attributes --
+# There are obviously some attributes implementation that are missing,
+# it might be something to do eventually if we want to make this
+# repository work for other project than nim-libp2p
+#
 # Stun Attribute
 # 0                   1                   2                   3
 # 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -23,6 +70,10 @@ type
 # +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 # |                         Value (variable)                ....
 # +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+type
+  StunAttributeEncodingError* = object of CatchableError
+
   RawStunAttribute* = object 
     attributeType*: uint16
     length* {.bin_value: it.value.len.}: uint16
@@ -74,6 +125,8 @@ proc isRequired*(typ: uint16): bool = typ <= 0x7FFF'u16
 proc isOptional*(typ: uint16): bool = typ >= 0x8000'u16
 
 # Error Code
+# https://datatracker.ietf.org/doc/html/rfc5389#section-15.6
+
 type
   ErrorCodeEnum* = enum
     ECTryAlternate = 300
@@ -100,6 +153,8 @@ proc encode*(T: typedesc[ErrorCode], code: ErrorCodeEnum, reason: string = ""): 
                             value: value)
 
 # Unknown Attribute
+# https://datatracker.ietf.org/doc/html/rfc5389#section-15.9
+
 type
   UnknownAttribute* = object
     unknownAttr: seq[uint16]
@@ -113,6 +168,7 @@ proc encode*(T: typedesc[UnknownAttribute], unknownAttr: seq[uint16]): RawStunAt
                             value: value)
 
 # Fingerprint
+# https://datatracker.ietf.org/doc/html/rfc5389#section-15.5
 
 type
   Fingerprint* = object
@@ -125,6 +181,7 @@ proc encode*(T: typedesc[Fingerprint], msg: seq[byte]): RawStunAttribute =
                             value: value)
 
 # Xor Mapped Address
+# https://datatracker.ietf.org/doc/html/rfc5389#section-15.2
 
 type
   MappedAddressFamily {.size: 1.} = enum
@@ -141,26 +198,26 @@ proc encode*(T: typedesc[XorMappedAddress], ta: TransportAddress,
              tid: array[12, byte]): RawStunAttribute =
   const magicCookie = @[ 0x21'u8, 0x12, 0xa4, 0x42 ]
   let
-    address =
+    (address, family) =
       if ta.family == AddressFamily.IPv4:
         var s = newSeq[uint8](4)
         for i in 0..3:
           s[i] = ta.address_v4[i] xor magicCookie[i]
-        s
+        (s, MAFIPv4)
       else:
         let magicCookieTid = magicCookie.concat(@tid)
         var s = newSeq[uint8](16)
         for i in 0..15:
           s[i] = ta.address_v6[i] xor magicCookieTid[i]
-        s
-    xma = T(family: if ta.family == AddressFamily.IPv4: MAFIPv4 else: MAFIPv6,
-            port: ta.port.distinctBase xor 0x2112'u16, address: address)
+        (s, MAFIPv6)
+    xma = T(family: family, port: ta.port.distinctBase xor 0x2112'u16, address: address)
     value = Binary.encode(xma)
   result = RawStunAttribute(attributeType: AttrXORMappedAddress.uint16,
                             length: value.len().uint16,
                             value: value)
 
 # Message Integrity
+# https://datatracker.ietf.org/doc/html/rfc5389#section-15.4
 
 type
   MessageIntegrity* = object
@@ -169,5 +226,4 @@ type
 proc encode*(T: typedesc[MessageIntegrity], msg: seq[byte], key: seq[byte]): RawStunAttribute =
   let value = Binary.encode(T(msgInt: hmacSha1(key, msg)))
   result = RawStunAttribute(attributeType: AttrMessageIntegrity.uint16,
-                            length: value.len().uint16,
-                            value: value)
+                            length: value.len().uint16, value: value)
