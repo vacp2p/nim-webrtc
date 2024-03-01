@@ -11,7 +11,6 @@ import std/sha1, sequtils, typetraits, std/md5
 import binary_serialization,
        stew/byteutils,
        chronos
-import ../utils
 
 # -- Utils --
 

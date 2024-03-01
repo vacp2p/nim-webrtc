@@ -17,6 +17,8 @@ import sctp, datachannel
 logScope:
   topics = "webrtc"
 
+# TODO: Implement a connect (or dial) procedure
+
 type
   WebRTC* = ref object
     udp*: UdpConn
@@ -29,7 +31,7 @@ proc new*(T: typedesc[WebRTC], address: TransportAddress): T =
   var webrtc = T(udp: UdpConn(), stun: StunConn(), dtls: Dtls())
   webrtc.udp.init(address)
   webrtc.stun.init(webrtc.udp, address)
-  webrtc.dtls.start(webrtc.stun, address)
+  webrtc.dtls.init(webrtc.stun, address)
   webrtc.sctp = Sctp.new(webrtc.dtls, address)
   return webrtc
 

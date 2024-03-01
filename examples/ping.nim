@@ -4,16 +4,8 @@ import ../webrtc/stun/stun_connection
 import ../webrtc/dtls/dtls
 import ../webrtc/sctp
 
-proc sendPong(conn: SctpConn) {.async.} =
-  var i = 0
-  while true:
-    let msg = await conn.read()
-    echo "Received: ", string.fromBytes(msg.data)
-    await conn.write(("pong " & $i).toBytes)
-    i.inc()
-
 proc main() {.async.} =
-  let laddr = initTAddress("127.0.0.1:4242")
+  let laddr = initTAddress("127.0.0.1:4244")
   let udp = UdpConn()
   udp.init(laddr)
   let stun = StunConn()
@@ -21,9 +13,11 @@ proc main() {.async.} =
   let dtls = Dtls()
   dtls.init(stun, laddr)
   let sctp = Sctp.new(dtls, laddr)
-  sctp.listen(13)
+  let conn = await sctp.connect(initTAddress("127.0.0.1:4242"), sctpPort = 13)
   while true:
-    let conn = await sctp.accept()
-    asyncSpawn conn.sendPong()
+    await conn.write("ping".toBytes)
+    let msg = await conn.read()
+    echo "Received: ", string.fromBytes(msg.data)
+    await sleepAsync(1.seconds)
 
 waitFor(main())
