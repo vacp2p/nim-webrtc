@@ -1,5 +1,5 @@
 # Nim-WebRTC
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -20,6 +20,7 @@ import mbedtls/md
 
 import chronicles
 
+# This sequence is used for debugging.
 const mb_ssl_states* = @[
   "MBEDTLS_SSL_HELLO_REQUEST",
   "MBEDTLS_SSL_CLIENT_HELLO",
@@ -53,14 +54,6 @@ const mb_ssl_states* = @[
   "MBEDTLS_SSL_TLS1_3_NEW_SESSION_TICKET_FLUSH"
 ]
 
-proc mbedtls_pk_rsa*(pk: mbedtls_pk_context): ptr mbedtls_rsa_context =
-  var key = pk
-  case mbedtls_pk_get_type(addr key)
-  of MBEDTLS_PK_RSA:
-    return cast[ptr mbedtls_rsa_context](pk.private_pk_ctx)
-  else:
-    return nil
-
 template generateKey*(random: mbedtls_ctr_drbg_context): mbedtls_pk_context =
   var res: mbedtls_pk_context
   mb_pk_init(res)
@@ -72,6 +65,7 @@ template generateKey*(random: mbedtls_ctr_drbg_context): mbedtls_pk_context =
 template generateCertificate*(random: mbedtls_ctr_drbg_context,
                               issuer_key: mbedtls_pk_context): mbedtls_x509_crt =
   let
+    # To be honest, I have no clue what to put here as a name
     name = "C=FR,O=Status,CN=webrtc"
     time_format = initTimeFormat("YYYYMMddHHmmss")
     time_from = times.now().format(time_format)
