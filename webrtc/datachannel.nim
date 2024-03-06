@@ -224,4 +224,4 @@ proc new*(_: type DataChannelConnection, conn: SctpConn): DataChannelConnection 
     incomingStreams: newAsyncQueue[DataChannelStream](),
     streamId: 1'u16 # TODO: Serveur == 1, client == 2
   )
-  conn.readLoopFut = conn.readLoop()
+  result.readLoopFut = result.readLoop()

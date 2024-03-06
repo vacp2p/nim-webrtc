@@ -28,15 +28,15 @@ type
 proc new*(T: typedesc[WebRTC], address: TransportAddress): T =
   result = T(udp: UdpConn(), stun: StunConn(), dtls: Dtls(), sctp: Sctp())
   result.udp.init(address)
-  result.stun.init(webrtc.udp, address)
-  result.dtls.init(webrtc.stun, address)
-  result.sctp.init(webrtc.dtls, address)
+  result.stun.init(result.udp, address)
+  result.dtls.init(result.stun, address)
+  result.sctp.init(result.dtls, address)
 
 proc listen*(self: WebRTC) =
   self.sctp.listen()
 
-proc connect*(self: WebRTC): Future[DataChannelConnection] {.async.} =
-  let sctpConn = await self.sctp.connect()
+proc connect*(self: WebRTC, raddr: TransportAddress): Future[DataChannelConnection] {.async.} =
+  let sctpConn = await self.sctp.connect(raddr) # TODO: Port?
   result = DataChannelConnection.new(sctpConn)
 
 proc accept*(w: WebRTC): Future[DataChannelConnection] {.async.} =
