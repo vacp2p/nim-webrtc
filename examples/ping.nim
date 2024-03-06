@@ -12,7 +12,8 @@ proc main() {.async.} =
   stun.init(udp, laddr)
   let dtls = Dtls()
   dtls.init(stun, laddr)
-  let sctp = Sctp.new(dtls, laddr)
+  let sctp = Sctp()
+  sctp.init(dtls, laddr)
   let conn = await sctp.connect(initTAddress("127.0.0.1:4242"), sctpPort = 13)
   while true:
     await conn.write("ping".toBytes)

@@ -227,7 +227,7 @@ proc handleUpcall(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
         except AsyncQueueFullError:
           trace "Queue full, dropping packet"
   elif bitand(events, SCTP_EVENT_WRITE) != 0:
-    debug "sctp event write in the upcall"
+    trace "sctp event write in the upcall"
   else:
     warn "Handle Upcall unexpected event", events
 
@@ -313,16 +313,15 @@ proc stopServer*(self: Sctp) =
     pc.sctpSocket.usrsctp_close()
   self.sockServer.usrsctp_close()
 
-proc new*(T: typedesc[Sctp], dtls: Dtls, laddr: TransportAddress): T =
-  let sctp = T(gotConnection: newAsyncEvent(),
-               timersHandler: timersHandler(),
-               dtls: dtls)
+proc init*(self: Sctp, dtls: Dtls, laddr: TransportAddress) =
+  self.gotConnection = newAsyncEvent()
+  self.timersHandler = timersHandler()
+  self.dtls = dtls
 
   usrsctp_init_nothreads(laddr.port.uint16, sendCallback, printf)
   discard usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_NONE)
   discard usrsctp_sysctl_set_sctp_ecn_enable(1)
-  usrsctp_register_address(cast[pointer](sctp))
-  return sctp
+  usrsctp_register_address(cast[pointer](self))
 
 proc stop*(self: Sctp) {.async.} =
   # TODO: close every connections

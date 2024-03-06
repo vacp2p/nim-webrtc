@@ -20,7 +20,8 @@ proc main() {.async.} =
   stun.init(udp, laddr)
   let dtls = Dtls()
   dtls.init(stun, laddr)
-  let sctp = Sctp.new(dtls, laddr)
+  let sctp = Sctp()
+  sctp.init(dtls, laddr)
   sctp.listen(13)
   while true:
     let conn = await sctp.accept()

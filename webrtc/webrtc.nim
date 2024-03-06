@@ -17,8 +17,6 @@ import sctp, datachannel
 logScope:
   topics = "webrtc"
 
-# TODO: Implement a connect (or dial) procedure
-
 type
   WebRTC* = ref object
     udp*: UdpConn
@@ -28,15 +26,18 @@ type
     port: int
 
 proc new*(T: typedesc[WebRTC], address: TransportAddress): T =
-  var webrtc = T(udp: UdpConn(), stun: StunConn(), dtls: Dtls())
-  webrtc.udp.init(address)
-  webrtc.stun.init(webrtc.udp, address)
-  webrtc.dtls.init(webrtc.stun, address)
-  webrtc.sctp = Sctp.new(webrtc.dtls, address)
-  return webrtc
+  result = T(udp: UdpConn(), stun: StunConn(), dtls: Dtls(), sctp: Sctp())
+  result.udp.init(address)
+  result.stun.init(webrtc.udp, address)
+  result.dtls.init(webrtc.stun, address)
+  result.sctp.init(webrtc.dtls, address)
 
-proc listen*(w: WebRTC) =
-  w.sctp.listen()
+proc listen*(self: WebRTC) =
+  self.sctp.listen()
+
+proc connect*(self: WebRTC): Future[DataChannelConnection] {.async.} =
+  let sctpConn = await self.sctp.connect()
+  result = DataChannelConnection.new(sctpConn)
 
 proc accept*(w: WebRTC): Future[DataChannelConnection] {.async.} =
   let sctpConn = await w.sctp.accept()
