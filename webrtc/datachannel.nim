@@ -1,5 +1,5 @@
 # Nim-WebRTC
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -19,6 +19,10 @@ export binary_serialization
 
 logScope:
   topics = "webrtc datachannel"
+
+# Implementation of the DataChannel protocol, mostly following
+# https://www.rfc-editor.org/rfc/rfc8831.html and
+# https://www.rfc-editor.org/rfc/rfc8832.html
 
 type
   DataChannelProtocolIds* {.size: 4.} = enum
@@ -201,7 +205,7 @@ proc readLoop(conn: DataChannelConnection) {.async.} =
   try:
     while true:
       let message = await conn.conn.read()
-      # TODO: might be necessary to check the others protocolId at some point
+      # TODO: check the protocolId
       if message.params.protocolId == uint32(WebRtcDcep):
         #TODO should we really await?
         await conn.handleControl(message)
