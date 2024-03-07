@@ -61,7 +61,6 @@ jobs:
         run: |
           nim --version
           nimble --version
-          #TODO
-          #nimble test
-          nim c examples/sctp_ping.nim
-          nim c examples/sctp_pong.nim
+          nimble test
+          nim c examples/ping.nim
+          nim c examples/pong.nim

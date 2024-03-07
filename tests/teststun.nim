@@ -1,4 +1,4 @@
-import ../webrtc/stun
+import ../webrtc/stun/stun
 import ./asyncunit
 import binary_serialization
 
