@@ -4,12 +4,12 @@ import strformat, os
 import nativesockets
 
 # C include directory
-const root = currentSourcePath.parentDir
+const root = currentSourcePath.parentDir.parentDir
 const usrsctpInclude = root/"usrsctp"/"usrsctplib"
 
 {.passc: fmt"-I{usrsctpInclude}".}
 
-# Generated @ 2022-11-23T14:21:00+01:00
+# Generated @ 2023-03-30T13:55:23+02:00
 # Command line:
 #   /home/lchenut/.nimble/pkgs/nimterop-0.6.13/nimterop/toast --compile=./usrsctp/usrsctplib/netinet/sctp_input.c --compile=./usrsctp/usrsctplib/netinet/sctp_asconf.c --compile=./usrsctp/usrsctplib/netinet/sctp_pcb.c --compile=./usrsctp/usrsctplib/netinet/sctp_usrreq.c --compile=./usrsctp/usrsctplib/netinet/sctp_cc_functions.c --compile=./usrsctp/usrsctplib/netinet/sctp_auth.c --compile=./usrsctp/usrsctplib/netinet/sctp_userspace.c --compile=./usrsctp/usrsctplib/netinet/sctp_output.c --compile=./usrsctp/usrsctplib/netinet/sctp_callout.c --compile=./usrsctp/usrsctplib/netinet/sctp_crc32.c --compile=./usrsctp/usrsctplib/netinet/sctp_sysctl.c --compile=./usrsctp/usrsctplib/netinet/sctp_sha1.c --compile=./usrsctp/usrsctplib/netinet/sctp_timer.c --compile=./usrsctp/usrsctplib/netinet/sctputil.c --compile=./usrsctp/usrsctplib/netinet/sctp_bsd_addr.c --compile=./usrsctp/usrsctplib/netinet/sctp_peeloff.c --compile=./usrsctp/usrsctplib/netinet/sctp_indata.c --compile=./usrsctp/usrsctplib/netinet/sctp_ss_functions.c --compile=./usrsctp/usrsctplib/user_socket.c --compile=./usrsctp/usrsctplib/netinet6/sctp6_usrreq.c --compile=./usrsctp/usrsctplib/user_mbuf.c --compile=./usrsctp/usrsctplib/user_environment.c --compile=./usrsctp/usrsctplib/user_recv_thread.c --pnim --preprocess --noHeader --defines=SCTP_PROCESS_LEVEL_LOCKS --defines=SCTP_SIMPLE_ALLOCATOR --defines=__Userspace__ --defines=STDC_HEADERS=1 --defines=HAVE_SYS_TYPES_H=1 --defines=HAVE_SYS_STAT_H=1 --defines=HAVE_STDLIB_H=1 --defines=HAVE_STRING_H=1 --defines=HAVE_MEMORY_H=1 --defines=HAVE_STRINGS_H=1 --defines=HAVE_INTTYPES_H=1 --defines=HAVE_STDINT_H=1 --defines=HAVE_UNISTD_H=1 --defines=HAVE_DLFCN_H=1 --defines=LT_OBJDIR=".libs/" --defines=SCTP_DEBUG=1 --defines=INET=1 --defines=INET6=1 --defines=HAVE_SOCKET=1 --defines=HAVE_INET_ADDR=1 --defines=HAVE_STDATOMIC_H=1 --defines=HAVE_SYS_QUEUE_H=1 --defines=HAVE_LINUX_IF_ADDR_H=1 --defines=HAVE_LINUX_RTNETLINK_H=1 --defines=HAVE_NETINET_IP_ICMP_H=1 --defines=HAVE_NET_ROUTE_H=1 --defines=_GNU_SOURCE --replace=sockaddr=SockAddr --replace=SockAddr_storage=Sockaddr_storage --replace=SockAddr_in=Sockaddr_in --replace=SockAddr_conn=Sockaddr_conn --replace=socklen_t=SockLen --includeDirs=./usrsctp/usrsctplib ./usrsctp/usrsctplib/usrsctp.h
 
@@ -47,30 +47,29 @@ const usrsctpInclude = root/"usrsctp"/"usrsctplib"
 {.passc: "-DHAVE_NETINET_IP_ICMP_H=1".}
 {.passc: "-DHAVE_NET_ROUTE_H=1".}
 {.passc: "-D_GNU_SOURCE".}
-{.passc: "-I./usrsctp/usrsctplib".}
-{.compile: "./usrsctp/usrsctplib/netinet/sctp_input.c".}
-{.compile: "./usrsctp/usrsctplib/netinet/sctp_asconf.c".}
-{.compile: "./usrsctp/usrsctplib/netinet/sctp_pcb.c".}
-{.compile: "./usrsctp/usrsctplib/netinet/sctp_usrreq.c".}
-{.compile: "./usrsctp/usrsctplib/netinet/sctp_cc_functions.c".}
-{.compile: "./usrsctp/usrsctplib/netinet/sctp_auth.c".}
-{.compile: "./usrsctp/usrsctplib/netinet/sctp_userspace.c".}
-{.compile: "./usrsctp/usrsctplib/netinet/sctp_output.c".}
-{.compile: "./usrsctp/usrsctplib/netinet/sctp_callout.c".}
-{.compile: "./usrsctp/usrsctplib/netinet/sctp_crc32.c".}
-{.compile: "./usrsctp/usrsctplib/netinet/sctp_sysctl.c".}
-{.compile: "./usrsctp/usrsctplib/netinet/sctp_sha1.c".}
-{.compile: "./usrsctp/usrsctplib/netinet/sctp_timer.c".}
-{.compile: "./usrsctp/usrsctplib/netinet/sctputil.c".}
-{.compile: "./usrsctp/usrsctplib/netinet/sctp_bsd_addr.c".}
-{.compile: "./usrsctp/usrsctplib/netinet/sctp_peeloff.c".}
-{.compile: "./usrsctp/usrsctplib/netinet/sctp_indata.c".}
-{.compile: "./usrsctp/usrsctplib/netinet/sctp_ss_functions.c".}
-{.compile: "./usrsctp/usrsctplib/user_socket.c".}
-{.compile: "./usrsctp/usrsctplib/netinet6/sctp6_usrreq.c".}
-{.compile: "./usrsctp/usrsctplib/user_mbuf.c".}
-{.compile: "./usrsctp/usrsctplib/user_environment.c".}
-{.compile: "./usrsctp/usrsctplib/user_recv_thread.c".}
+{.compile: usrsctpInclude / "netinet/sctp_input.c".}
+{.compile: usrsctpInclude / "netinet/sctp_asconf.c".}
+{.compile: usrsctpInclude / "netinet/sctp_pcb.c".}
+{.compile: usrsctpInclude / "netinet/sctp_usrreq.c".}
+{.compile: usrsctpInclude / "netinet/sctp_cc_functions.c".}
+{.compile: usrsctpInclude / "netinet/sctp_auth.c".}
+{.compile: usrsctpInclude / "netinet/sctp_userspace.c".}
+{.compile: usrsctpInclude / "netinet/sctp_output.c".}
+{.compile: usrsctpInclude / "netinet/sctp_callout.c".}
+{.compile: usrsctpInclude / "netinet/sctp_crc32.c".}
+{.compile: usrsctpInclude / "netinet/sctp_sysctl.c".}
+{.compile: usrsctpInclude / "netinet/sctp_sha1.c".}
+{.compile: usrsctpInclude / "netinet/sctp_timer.c".}
+{.compile: usrsctpInclude / "netinet/sctputil.c".}
+{.compile: usrsctpInclude / "netinet/sctp_bsd_addr.c".}
+{.compile: usrsctpInclude / "netinet/sctp_peeloff.c".}
+{.compile: usrsctpInclude / "netinet/sctp_indata.c".}
+{.compile: usrsctpInclude / "netinet/sctp_ss_functions.c".}
+{.compile: usrsctpInclude / "user_socket.c".}
+{.compile: usrsctpInclude / "netinet6/sctp6_usrreq.c".}
+{.compile: usrsctpInclude / "user_mbuf.c".}
+{.compile: usrsctpInclude / "user_environment.c".}
+{.compile: usrsctpInclude / "user_recv_thread.c".}
 const
   MSG_NOTIFICATION* = 0x00002000
   AF_CONN* = 123
