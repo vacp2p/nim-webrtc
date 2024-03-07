@@ -33,4 +33,4 @@ proc runTest(filename: string) =
   rmFile "tests/" & filename.toExe
 
 task test, "Run test":
-  runTest("testdatachannel")
+  runTest("runalltests")
