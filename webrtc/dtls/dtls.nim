@@ -284,7 +284,7 @@ proc removeConnection(self: Dtls, conn: DtlsConn, raddr: TransportAddress) {.asy
   await conn.join()
   self.connections.del(raddr)
 
-proc accept*(self: Dtls): Future[DtlsConn] {.async.} =
+proc accept*(self: Dtls): Future[DtlsConn] {.async, gcsafe.} =
   var
     selfvar = self
     res = DtlsConn()
@@ -312,7 +312,7 @@ proc accept*(self: Dtls): Future[DtlsConn] {.async.} =
   mb_ssl_conf_own_cert(res.config, srvcert, pkey)
   mb_ssl_cookie_setup(res.cookie, mbedtls_ctr_drbg_random, res.ctr_drbg)
   mb_ssl_conf_dtls_cookies(res.config, res.cookie)
-  #mb_ssl_set_timer_cb(res.ssl, res.timer)
+  mb_ssl_set_timer_cb(res.ssl, res.timer)
   mb_ssl_setup(res.ssl, res.config)
   mb_ssl_session_reset(res.ssl)
   mb_ssl_set_verify(res.ssl, verify, res)
@@ -333,7 +333,7 @@ proc accept*(self: Dtls): Future[DtlsConn] {.async.} =
       continue
   return res
 
-proc connect*(self: Dtls, raddr: TransportAddress): Future[DtlsConn] {.async.} =
+proc connect*(self: Dtls, raddr: TransportAddress): Future[DtlsConn] {.async, gcsafe.} =
   var
     selfvar = self
     res = DtlsConn()
@@ -361,7 +361,7 @@ proc connect*(self: Dtls, raddr: TransportAddress): Future[DtlsConn] {.async.} =
   mb_ssl_conf_rng(res.config, mbedtls_ctr_drbg_random, res.ctr_drbg)
   mb_ssl_conf_read_timeout(res.config, 10000) # in milliseconds
   mb_ssl_conf_ca_chain(res.config, srvcert.next, nil)
-  #mb_ssl_set_timer_cb(res.ssl, res.timer)
+  mb_ssl_set_timer_cb(res.ssl, res.timer)
   mb_ssl_setup(res.ssl, res.config)
   mb_ssl_set_verify(res.ssl, verify, res)
   mb_ssl_conf_authmode(res.config, MBEDTLS_SSL_VERIFY_OPTIONAL)
