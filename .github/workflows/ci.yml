@@ -21,7 +21,7 @@ jobs:
             cpu: amd64
           - os: windows
             cpu: amd64
-        nim: [1.2.18, 1.6.10, devel]
+        nim: [1.6.16, devel]
         include:
           - target:
               os: linux

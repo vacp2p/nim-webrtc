@@ -5,7 +5,7 @@ description = "Webrtc stack"
 license = "MIT"
 installDirs = @["usrsctp", "webrtc"]
 
-requires "nim >= 1.2.0",
+requires "nim >= 1.6.0",
          "chronicles >= 0.10.2",
          "chronos >= 3.0.6",
          "https://github.com/status-im/nim-binary-serialization.git",
