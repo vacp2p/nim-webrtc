@@ -284,7 +284,7 @@ proc removeConnection(self: Dtls, conn: DtlsConn, raddr: TransportAddress) {.asy
   await conn.join()
   self.connections.del(raddr)
 
-proc accept*(self: Dtls): Future[DtlsConn] {.async, gcsafe.} =
+proc accept*(self: Dtls): Future[DtlsConn] {.async.} =
   var
     selfvar = self
     res = DtlsConn()
@@ -333,7 +333,7 @@ proc accept*(self: Dtls): Future[DtlsConn] {.async, gcsafe.} =
       continue
   return res
 
-proc connect*(self: Dtls, raddr: TransportAddress): Future[DtlsConn] {.async, gcsafe.} =
+proc connect*(self: Dtls, raddr: TransportAddress): Future[DtlsConn] {.async.} =
   var
     selfvar = self
     res = DtlsConn()
