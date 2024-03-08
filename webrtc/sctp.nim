@@ -159,7 +159,7 @@ proc write*(self: SctpConn, buf: seq[byte],
         self.sctpSocket.usrsctp_sendv(cast[pointer](addr cpy[0]), cpy.len().uint, nil, 0,
                                       nil, 0, SCTP_SENDV_NOINFO.cuint, 0)
     else:
-      let sendInfo = sctp_sndinfo(
+      var sendInfo = sctp_sndinfo(
         snd_sid: sendParams.streamId,
         # TODO: swapBytes => htonl?
         snd_ppid: sendParams.protocolId.swapBytes(),

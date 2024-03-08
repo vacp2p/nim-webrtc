@@ -59,10 +59,9 @@ type
 
   RawStunMessage = object
     msgType: uint16
-    # it.conten.len() + 8 Because the Fingerprint is added after the encoding
     length* {.bin_value: it.content.len().}: uint16
     magicCookie: uint32
-    transactionId: array[12, byte]
+    transactionId: array[12, byte] # Down from 16 to 12 bytes in RFC5389
     content* {.bin_len: it.length.}: seq[byte]
 
   StunMessage* = object
@@ -98,11 +97,11 @@ proc decode*(T: typedesc[StunMessage], msg: seq[byte]): StunMessage =
            transactionId: smi.transactionId,
            attributes: RawStunAttribute.decode(smi.content))
 
-proc encode*(msg: StunMessage, userOpt: Option[seq[byte]]): seq[byte] =
+proc encode*(msg: StunMessage, userOpt: Option[seq[byte]] = none(seq[byte])): seq[byte] =
   const pad = @[0, 3, 2, 1]
   var smi = RawStunMessage(msgType: msg.msgType,
-                             magicCookie: magicCookie,
-                             transactionId: msg.transactionId)
+                           magicCookie: magicCookie,
+                           transactionId: msg.transactionId)
   for attr in msg.attributes:
     smi.content.add(Binary.encode(attr))
     smi.content.add(newSeq[byte](pad[smi.content.len() mod 4]))
