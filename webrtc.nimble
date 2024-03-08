@@ -3,7 +3,7 @@ version = "0.0.1"
 author = "Status Research & Development GmbH"
 description = "Webrtc stack"
 license = "MIT"
-installDirs = @["usrsctp", "webrtc"]
+installDirs = @["webrtc"]
 
 requires "nim >= 1.6.0",
          "chronicles >= 0.10.2",
