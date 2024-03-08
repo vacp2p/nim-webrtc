@@ -9,7 +9,8 @@ requires "nim >= 1.6.0",
          "chronicles >= 0.10.2",
          "chronos >= 3.0.6",
          "https://github.com/status-im/nim-binary-serialization.git",
-         "https://github.com/status-im/nim-mbedtls.git"
+         "https://github.com/status-im/nim-mbedtls.git",
+         "https://github.com/status-im/nim-usrsctp.git"
 
 let nimc = getEnv("NIMC", "nim") # Which nim compiler to use
 let lang = getEnv("NIMLANG", "c") # Which backend (c/cpp/js)
