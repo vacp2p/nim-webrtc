@@ -1,3 +1,0 @@
-[submodule "usrsctp"]
-	path = usrsctp
-	url = git@github.com:sctplab/usrsctp.git
