@@ -285,9 +285,7 @@ proc removeConnection(self: Dtls, conn: DtlsConn, raddr: TransportAddress) {.asy
   self.connections.del(raddr)
 
 proc accept*(self: Dtls): Future[DtlsConn] {.async.} =
-  var
-    selfvar = self
-    res = DtlsConn()
+  var res = DtlsConn()
 
   res.init(self.conn, self.laddr)
   mb_ssl_init(res.ssl)
@@ -334,9 +332,7 @@ proc accept*(self: Dtls): Future[DtlsConn] {.async.} =
   return res
 
 proc connect*(self: Dtls, raddr: TransportAddress): Future[DtlsConn] {.async.} =
-  var
-    selfvar = self
-    res = DtlsConn()
+  var res = DtlsConn()
 
   res.init(self.conn, self.laddr)
   mb_ssl_init(res.ssl)
