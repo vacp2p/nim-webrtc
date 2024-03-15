@@ -123,6 +123,17 @@ type
 proc isRequired*(typ: uint16): bool = typ <= 0x7FFF'u16
 proc isOptional*(typ: uint16): bool = typ >= 0x8000'u16
 
+# Username
+# https://datatracker.ietf.org/doc/html/rfc5389#section-15.3
+
+type
+  UsernameAttribute* = object
+
+proc encode(T: typedesc[UsernameAttribute], username: seq[byte]): RawStunAttribute =
+  result = RawStunAttribute(attributeType: AttrUsername.uint16,
+                            length: username.len().uint16,
+                            value: username)
+
 # Error Code
 # https://datatracker.ietf.org/doc/html/rfc5389#section-15.6
 
