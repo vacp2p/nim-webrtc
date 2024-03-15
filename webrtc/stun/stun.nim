@@ -118,7 +118,7 @@ proc encode*(msg: StunMessage, userOpt: Option[seq[byte]] = none(seq[byte])): se
   result.addLength(8)
   result.add(Binary.encode(Fingerprint.encode(result)))
 
-proc getResponse*(T: typedesc[Stun], msg: seq[byte],
+proc getPong*(T: typedesc[Stun], msg: seq[byte],
     ta: TransportAddress): Option[seq[byte]] =
   if ta.family != AddressFamily.IPv4 and ta.family != AddressFamily.IPv6:
     return none(seq[byte])
