@@ -7,12 +7,19 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import std/sha1, sequtils, typetraits, std/md5
+import sequtils, typetraits, random, system, std/[md5, sha1]
 import binary_serialization,
        stew/byteutils,
        chronos
 
 # -- Utils --
+
+const charset = toSeq("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789".items)
+proc genUfrag*(size: int): seq[byte] =
+  # https://github.com/libp2p/specs/blob/master/webrtc/webrtc-direct.md?plain=1#L73-L77
+  result = newSeq[byte](size)
+  for i in 0..<size:
+    result[i] = charset[rand(0..<charset.len())].ord().uint8
 
 proc createCrc32Table(): array[0..255, uint32] =
   for i in 0..255:

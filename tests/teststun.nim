@@ -1,4 +1,4 @@
-import options
+import options, strutils
 import ../webrtc/stun/stun
 import ../webrtc/stun/stun_attributes
 import ./asyncunit
@@ -59,3 +59,9 @@ suite "Stun message encoding/decoding":
     expect AssertionDefect: discard StunMessage.decode(msgLengthFailed)
     let msgAttrFailed = @[ 0x00'u8, 0x01, 0x00, 0x08, 0x21, 0x12, 0xa4, 0x42, 0x75, 0x6a, 0x58, 0x46, 0x42, 0x58, 0x4e, 0x72, 0x6a, 0x50, 0x4d, 0x2b, 0x28, 0x00, 0x05, 0x79, 0x5e, 0x03, 0xd8 ]
     expect AssertionDefect: discard StunMessage.decode(msgAttrFailed)
+
+  test "genUfrag":
+    let s = genUfrag(20)
+    check s.len() == 20
+    for c in s:
+      check isAlphaNumeric(c.chr())
