@@ -26,7 +26,6 @@ logScope:
 # TODO:
 # - Replace doAssert by a proper exception management
 # - Find a clean way to manage SCTP ports
-# - Unregister address when closing
 
 proc perror(error: cstring) {.importc, cdecl, header: "<errno.h>".}
 proc printf(format: cstring) {.cdecl, importc: "printf", varargs, header: "<stdio.h>", gcsafe.}
@@ -178,6 +177,7 @@ proc write*(self: SctpConn, s: string) {.async.} =
 proc close*(self: SctpConn) {.async.} =
   self.usrsctpAwait:
     self.sctpSocket.usrsctp_close()
+  usrsctp_deregister_address(cast[pointer](self))
 
 # -- usrsctp receive data callbacks --
 
