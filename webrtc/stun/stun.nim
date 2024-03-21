@@ -156,5 +156,16 @@ proc getPong*(
   res.attributes.add(XorMappedAddress.encode(ta, sm.transactionId))
   return some(res.encode(sm.attributes.getAttribute(AttrUsername.uint16)))
 
+proc getPing*(
+    T: typedesc[Stun],
+    ta: TransportAddress,
+    username: seq[byte] = @[],
+    iceControlling: bool = true
+  ): seq[byte] =
+  var res = StunMessage(msgType: BindingRequest,
+                        transactionId: generateRandomSeq(12))
+  if username != @[]:
+    res.attributes.add(UsernameAttribute.encode(username))
+
 proc new*(T: typedesc[Stun]): T =
   result = T(iceTiebreaker: rand(uint64))
