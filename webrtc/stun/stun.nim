@@ -7,7 +7,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import bitops, strutils
+import bitops, strutils, random
 import chronos,
        chronicles,
        binary_serialization,
@@ -70,6 +70,12 @@ type
     attributes*: seq[RawStunAttribute]
 
   Stun* = object
+    iceTiebreaker: uint64
+
+proc generateRandomSeq(size: int): seq[byte] =
+  result = newSeq[byte](size)
+  for i in 0..<size:
+    result[i] = rand(255).uint8
 
 proc getAttribute(attrs: seq[RawStunAttribute], typ: uint16): Option[seq[byte]] =
   for attr in attrs:
@@ -118,8 +124,11 @@ proc encode*(msg: StunMessage, userOpt: Option[seq[byte]] = none(seq[byte])): se
   result.addLength(8)
   result.add(Binary.encode(Fingerprint.encode(result)))
 
-proc getPong*(T: typedesc[Stun], msg: seq[byte],
-    ta: TransportAddress): Option[seq[byte]] =
+proc getPong*(
+    T: typedesc[Stun],
+    msg: seq[byte],
+    ta: TransportAddress
+  ): Option[seq[byte]] =
   if ta.family != AddressFamily.IPv4 and ta.family != AddressFamily.IPv6:
     return none(seq[byte])
   let sm =
@@ -148,4 +157,4 @@ proc getPong*(T: typedesc[Stun], msg: seq[byte],
   return some(res.encode(sm.attributes.getAttribute(AttrUsername.uint16)))
 
 proc new*(T: typedesc[Stun]): T =
-  result = T()
+  result = T(iceTiebreaker: rand(uint64))

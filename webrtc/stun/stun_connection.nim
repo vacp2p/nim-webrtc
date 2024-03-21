@@ -27,11 +27,14 @@ proc handles(self: StunConn) {.async.} =
   while true:
     let (msg, raddr) = await self.conn.read()
     if Stun.isMessage(msg):
-      let res = Stun.getResponse(msg, self.laddr)
+      let res = Stun.getPong(msg, self.laddr)
       if res.isSome():
         await self.conn.write(raddr, res.get())
     else:
       self.dataRecv.addLastNoWait((msg, raddr))
+
+proc dial(self: StunConn, raddr: TransportAddress) {.async.} =
+  discard
 
 proc init*(self: StunConn, conn: UdpConn, laddr: TransportAddress) =
   self.conn = conn
