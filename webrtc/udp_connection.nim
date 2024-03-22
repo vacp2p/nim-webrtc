@@ -17,10 +17,14 @@ logScope:
 # the remote address used by the underlying protocols (dtls/sctp etc...)
 
 type
+  UdpPacketInfo* = tuple
+    message: seq[byte]
+    raddr: TransportAddress
+
   UdpConn* = ref object
     laddr*: TransportAddress
     udp: DatagramTransport
-    dataRecv: AsyncQueue[(seq[byte], TransportAddress)]
+    dataRecv: AsyncQueue[UdpPacketInfo]
     closed: bool
 
 proc init*(self: UdpConn, laddr: TransportAddress) =
@@ -32,7 +36,7 @@ proc init*(self: UdpConn, laddr: TransportAddress) =
     let msg = udp.getMessage()
     self.dataRecv.addLastNoWait((msg, address))
 
-  self.dataRecv = newAsyncQueue[(seq[byte], TransportAddress)]()
+  self.dataRecv = newAsyncQueue[UdpPacketInfo]()
   self.udp = newDatagramTransport(onReceive, local = laddr)
 
 proc close*(self: UdpConn) {.async.} =
@@ -49,7 +53,7 @@ proc write*(self: UdpConn, raddr: TransportAddress, msg: seq[byte]) {.async.} =
   trace "UDP write", msg
   await self.udp.sendTo(raddr, msg)
 
-proc read*(self: UdpConn): Future[(seq[byte], TransportAddress)] {.async.} =
+proc read*(self: UdpConn): Future[UdpPacketInfo] {.async.} =
   if self.closed:
     debug "Try to read on an already closed UdpConn"
     return
