@@ -28,25 +28,33 @@ type
     closed: bool
 
 proc init*(self: UdpConn, laddr: TransportAddress) =
+  ## Initialize an Udp Connection
+  ##
   self.laddr = laddr
   self.closed = false
 
-  proc onReceive(udp: DatagramTransport, address: TransportAddress) {.async, gcsafe.} =
+  proc onReceive(udp: DatagramTransport, raddr: TransportAddress) {.async, gcsafe.} =
+    # On receive Udp message callback, store the
+    # message with the corresponding remote address
     trace "UDP onReceive"
     let msg = udp.getMessage()
-    self.dataRecv.addLastNoWait((msg, address))
+    self.dataRecv.addLastNoWait((msg, raddr))
 
   self.dataRecv = newAsyncQueue[UdpPacketInfo]()
   self.udp = newDatagramTransport(onReceive, local = laddr)
 
-proc close*(self: UdpConn) {.async.} =
+proc close*(self: UdpConn) =
+  ## Close an Udp Connection
+  ##
   if self.closed:
-    debug "Try to close UdpConn twice"
+    debug "Trying to close an already closed UdpConn"
     return
   self.closed = true
   self.udp.close()
 
 proc write*(self: UdpConn, raddr: TransportAddress, msg: seq[byte]) {.async.} =
+  ## Write a message on Udp to a remote address `raddr`
+  ##
   if self.closed:
     debug "Try to write on an already closed UdpConn"
     return
@@ -54,6 +62,8 @@ proc write*(self: UdpConn, raddr: TransportAddress, msg: seq[byte]) {.async.} =
   await self.udp.sendTo(raddr, msg)
 
 proc read*(self: UdpConn): Future[UdpPacketInfo] {.async.} =
+  ## Read the next received Udp message
+  ##
   if self.closed:
     debug "Try to read on an already closed UdpConn"
     return
