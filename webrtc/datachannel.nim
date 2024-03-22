@@ -24,6 +24,9 @@ logScope:
 # https://www.rfc-editor.org/rfc/rfc8831.html and
 # https://www.rfc-editor.org/rfc/rfc8832.html
 
+# -- Open/Ack DataChannel Message --
+# Use binary-serialization in order to encode/decode
+
 type
   DataChannelProtocolIds* {.size: 4.} = enum
     WebRtcDcep = 50
@@ -61,6 +64,8 @@ type
 
 proc ordered(t: DataChannelType): bool =
   t in [Reliable, PartialReliableRexmit, PartialReliableTimed]
+
+# -- DataChannelStream --
 
 type
   #TODO handle closing
@@ -116,6 +121,10 @@ proc sendControlMessage(stream: DataChannelStream, msg: DataChannelMessage) {.as
   trace "send control message", msg
 
   await stream.conn.write(encoded, sendInfo)
+
+proc closeStream*(stream: DataChannelStream) {.async.} =
+  # TODO
+  discard
 
 proc openStream*(
   conn: DataChannelConnection,
