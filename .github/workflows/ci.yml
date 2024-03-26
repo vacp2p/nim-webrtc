@@ -49,7 +49,7 @@ jobs:
           submodules: true
 
       - name: MSYS2 (Windows amd64)
-        if: inputs.os == 'Windows' && inputs.cpu == 'amd64'
+        if: ${{ matrix.target.os }} == 'windows' && ${{ matrix.target.cpy }} == 'amd64'
         uses: msys2/setup-msys2@v2
         with:
           path-type: inherit
