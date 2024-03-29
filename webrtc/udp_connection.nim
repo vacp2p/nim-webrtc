@@ -30,11 +30,10 @@ type
     dataRecv: AsyncQueue[UdpPacketInfo]
     closed: bool
 
-proc init*(self: UdpConn, laddr: TransportAddress) =
+proc init*(T: type UdpConn, laddr: TransportAddress): T =
   ## Initialize an Udp Connection
   ##
-  self.laddr = laddr
-  self.closed = false
+  var self = T(laddr: laddr, closed: false)
 
   proc onReceive(
       udp: DatagramTransport,
@@ -51,6 +50,7 @@ proc init*(self: UdpConn, laddr: TransportAddress) =
 
   self.dataRecv = newAsyncQueue[UdpPacketInfo]()
   self.udp = newDatagramTransport(onReceive, local = laddr)
+  return self
 
 proc close*(self: UdpConn) =
   ## Close an Udp Connection
