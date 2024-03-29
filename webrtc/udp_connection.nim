@@ -75,9 +75,8 @@ proc write*(
   try:
     await self.udp.sendTo(raddr, msg)
   except TransportError as exc:
-    raise newException(WebRtcUdpError, exc.msg, exc)
-  except CancelledError as exc:
-    raise exc
+    raise newException(WebRtcUdpError,
+      "Error when sending data on a DatagramTransport: " & exc.msg , exc)
 
 proc read*(self: UdpConn): Future[UdpPacketInfo] {.async: (raises: [CancelledError]).} =
   ## Read the next received Udp message
