@@ -75,7 +75,7 @@ proc write*(
   try:
     await self.udp.sendTo(raddr, msg)
   except TransportError as exc:
-    raise (ref WebRtcUdpError)(msg: exc.msg)
+    raise newException(WebRtcUdpError, exc.msg, exc)
   except CancelledError as exc:
     raise exc
 
