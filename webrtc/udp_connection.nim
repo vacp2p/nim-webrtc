@@ -42,9 +42,12 @@ proc init*(self: UdpConn, laddr: TransportAddress) =
     ) {.async: (raises: []), gcsafe.} =
     # On receive Udp message callback, store the
     # message with the corresponding remote address
-    trace "UDP onReceive"
-    let msg = udp.getMessage()
-    self.dataRecv.addLastNoWait((msg, raddr))
+    try:
+      trace "UDP onReceive"
+      let msg = udp.getMessage()
+      self.dataRecv.addLastNoWait((msg, raddr))
+    except CatchableError as exc:
+      raiseAssert(exc.msg)
 
   self.dataRecv = newAsyncQueue[UdpPacketInfo]()
   self.udp = newDatagramTransport(onReceive, local = laddr)
@@ -72,7 +75,7 @@ proc write*(
   try:
     await self.udp.sendTo(raddr, msg)
   except TransportError as exc:
-    raise (ref WebRtcUdpError)(msg: msg)
+    raise (ref WebRtcUdpError)(msg: exc.msg)
   except CancelledError as exc:
     raise exc
 
