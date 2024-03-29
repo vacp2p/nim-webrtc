@@ -7,6 +7,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+import errors
 import chronos, chronicles
 
 logScope:
@@ -17,6 +18,8 @@ logScope:
 # the remote address used by the underlying protocols (dtls/sctp etc...)
 
 type
+  WebRtcUdpError = object of WebRtcError
+
   UdpPacketInfo* = tuple
     message: seq[byte]
     raddr: TransportAddress
@@ -52,16 +55,25 @@ proc close*(self: UdpConn) =
   self.closed = true
   self.udp.close()
 
-proc write*(self: UdpConn, raddr: TransportAddress, msg: seq[byte]) {.async.} =
+proc write*(
+    self: UdpConn,
+    raddr: TransportAddress,
+    msg: seq[byte]
+  ) {.async: (raises: [CancelledError, WebRtcUdpError]).} =
   ## Write a message on Udp to a remote address `raddr`
   ##
   if self.closed:
     debug "Try to write on an already closed UdpConn"
     return
   trace "UDP write", msg
-  await self.udp.sendTo(raddr, msg)
+  try:
+    await self.udp.sendTo(raddr, msg)
+  except TransportError as exc:
+    raise (ref WebRtcUdpError)(msg: msg)
+  except CancelledError as exc:
+    raise exc
 
-proc read*(self: UdpConn): Future[UdpPacketInfo] {.async.} =
+proc read*(self: UdpConn): Future[UdpPacketInfo] {.async: (raises: [CancelledError]).} =
   ## Read the next received Udp message
   ##
   if self.closed:
