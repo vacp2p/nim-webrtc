@@ -36,7 +36,10 @@ proc init*(self: UdpConn, laddr: TransportAddress) =
   self.laddr = laddr
   self.closed = false
 
-  proc onReceive(udp: DatagramTransport, raddr: TransportAddress) {.async, gcsafe.} =
+  proc onReceive(
+      udp: DatagramTransport,
+      raddr: TransportAddress
+    ) {.async: (raises: []), gcsafe.} =
     # On receive Udp message callback, store the
     # message with the corresponding remote address
     trace "UDP onReceive"
