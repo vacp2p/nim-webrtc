@@ -13,7 +13,12 @@ import ../udp_connection, stun
 logScope:
   topics = "webrtc stun"
 
-# TODO: Work fine when behaves like a server, need to implement the client side
+# TODO:
+# - Work fine when behaves like a server, need to implement the client side
+#   It needs a bit of a rework on the Stun object such as:
+#   - Add a connect/accept couple
+#   - Add a ping/pong (more like BindingRequest/BindingResponse) by remote address
+#   - Need to implement ICE-CONTROLL(ED|ING) for browser to browser (not critical)
 
 type
   StunConn* = ref object
@@ -24,6 +29,9 @@ type
     closed: bool
 
 proc handles(self: StunConn) {.async: (raises: [CancelledError]).} =
+  # Infinite read loop. When the message is a Stun Message, it returns the
+  # correct acknowledgement. When the message isn't a Stun Message, it is
+  # stored until it is read.
   while true:
     let packetInfo = await self.conn.read()
     if Stun.isMessage(packetInfo.message):
@@ -37,10 +45,9 @@ proc handles(self: StunConn) {.async: (raises: [CancelledError]).} =
     else:
       self.dataRecv.addLastNoWait(packetInfo)
 
-proc dial(self: StunConn, raddr: TransportAddress) {.async: (raises: []).} =
-  discard
-
 proc init*(T: type StunConn, conn: UdpConn, laddr: TransportAddress): T =
+  ## Initialize a Stun Connection
+  ##
   var self = T()
   self.conn = conn
   self.laddr = laddr
@@ -50,6 +57,8 @@ proc init*(T: type StunConn, conn: UdpConn, laddr: TransportAddress): T =
   return self
 
 proc close*(self: StunConn) =
+  ## Close a Stun Connection
+  ##
   if self.closed:
     debug "Try to close an already closed StunConn"
     return
@@ -62,12 +71,17 @@ proc write*(
     raddr: TransportAddress,
     msg: seq[byte]
   ) {.async: (raises: [CancelledError, WebRtcUdpError].} =
+  ## Write a message on Udp to a remote `raddr` using
+  ## the underlying Udp Connection
+  ##
   if self.closed:
     debug "Try to write on an already closed StunConn"
     return
   await self.conn.write(raddr, msg)
 
 proc read*(self: StunConn): Future[UdpPacketInfo] {.async: (raises: [CancelledError]).} =
+  ## Read the next received non-Stun Message
+  ##
   if self.closed:
     debug "Try to read on an already closed StunConn"
     return
