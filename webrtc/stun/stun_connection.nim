@@ -46,7 +46,7 @@ proc init*(self: StunConn, conn: UdpConn, laddr: TransportAddress) =
 
 proc close*(self: StunConn) {.async.} =
   if self.closed:
-    debug "Try to close StunConn twice"
+    debug "Try to close an already closed StunConn"
     return
   self.handlesFut.cancel() # check before?
   await self.conn.close()
