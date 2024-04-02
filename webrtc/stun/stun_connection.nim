@@ -19,7 +19,7 @@ type
   StunConn* = ref object
     conn: UdpConn
     laddr: TransportAddress
-    dataRecv: AsyncQueue[(seq[byte], TransportAddress)]
+    dataRecv: AsyncQueue[UdpPacketInfo]
     handlesFut: Future[void]
     closed: bool
 
