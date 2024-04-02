@@ -25,13 +25,13 @@ type
 
 proc handles(self: StunConn) {.async.} =
   while true:
-    let (msg, raddr) = await self.conn.read()
-    if Stun.isMessage(msg):
-      let res = Stun.getPong(msg, self.laddr)
+    let packetInfo = await self.conn.read()
+    if Stun.isMessage(packetInfo.message):
+      let res = Stun.getPong(packetInfo.message, self.laddr)
       if res.isSome():
-        await self.conn.write(raddr, res.get())
+        await self.conn.write(packetInfo.raddr, res.get())
     else:
-      self.dataRecv.addLastNoWait((msg, raddr))
+      self.dataRecv.addLastNoWait(packetInfo)
 
 proc dial(self: StunConn, raddr: TransportAddress) {.async.} =
   discard
@@ -41,7 +41,7 @@ proc init*(self: StunConn, conn: UdpConn, laddr: TransportAddress) =
   self.laddr = laddr
   self.closed = false
 
-  self.dataRecv = newAsyncQueue[(seq[byte], TransportAddress)]()
+  self.dataRecv = newAsyncQueue[UdpPacketInfo]()
   self.handlesFut = self.handles()
 
 proc close*(self: StunConn) {.async.} =
@@ -57,7 +57,7 @@ proc write*(self: StunConn, raddr: TransportAddress, msg: seq[byte]) {.async.} =
     return
   await self.conn.write(raddr, msg)
 
-proc read*(self: StunConn): Future[(seq[byte], TransportAddress)] {.async.} =
+proc read*(self: StunConn): Future[UdpPacketInfo] {.async.} =
   if self.closed:
     debug "Try to read on an already closed StunConn"
     return
