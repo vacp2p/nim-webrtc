@@ -40,13 +40,14 @@ proc handles(self: StunConn) {.async: (raises: [CancelledError]).} =
 proc dial(self: StunConn, raddr: TransportAddress) {.async: (raises: []).} =
   discard
 
-proc init*(self: StunConn, conn: UdpConn, laddr: TransportAddress) =
+proc init*(T: type StunConn, conn: UdpConn, laddr: TransportAddress): T =
+  var self = T()
   self.conn = conn
   self.laddr = laddr
   self.closed = false
-
   self.dataRecv = newAsyncQueue[UdpPacketInfo]()
   self.handlesFut = self.handles()
+  return self
 
 proc close*(self: StunConn) =
   if self.closed:
