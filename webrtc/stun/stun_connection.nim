@@ -23,17 +23,21 @@ type
     handlesFut: Future[void]
     closed: bool
 
-proc handles(self: StunConn) {.async.} =
+proc handles(self: StunConn) {.async: (raises: [CancelledError]).} =
   while true:
     let packetInfo = await self.conn.read()
     if Stun.isMessage(packetInfo.message):
       let res = Stun.getPong(packetInfo.message, self.laddr)
       if res.isSome():
-        await self.conn.write(packetInfo.raddr, res.get())
+        try:
+          await self.conn.write(packetInfo.raddr, res.get())
+        except WebRtcUdpError as exc:
+          trace "Failed to write the Stun response", error=exc.msg
+          continue
     else:
       self.dataRecv.addLastNoWait(packetInfo)
 
-proc dial(self: StunConn, raddr: TransportAddress) {.async.} =
+proc dial(self: StunConn, raddr: TransportAddress) {.async: (raises: []).} =
   discard
 
 proc init*(self: StunConn, conn: UdpConn, laddr: TransportAddress) =
@@ -44,20 +48,25 @@ proc init*(self: StunConn, conn: UdpConn, laddr: TransportAddress) =
   self.dataRecv = newAsyncQueue[UdpPacketInfo]()
   self.handlesFut = self.handles()
 
-proc close*(self: StunConn) {.async.} =
+proc close*(self: StunConn) =
   if self.closed:
     debug "Try to close an already closed StunConn"
     return
-  self.handlesFut.cancel() # check before?
-  await self.conn.close()
+  self.closed = true
+  self.handlesFut.cancel()
+  self.conn.close()
 
-proc write*(self: StunConn, raddr: TransportAddress, msg: seq[byte]) {.async.} =
+proc write*(
+    self: StunConn,
+    raddr: TransportAddress,
+    msg: seq[byte]
+  ) {.async: (raises: [CancelledError, WebRtcUdpError].} =
   if self.closed:
     debug "Try to write on an already closed StunConn"
     return
   await self.conn.write(raddr, msg)
 
-proc read*(self: StunConn): Future[UdpPacketInfo] {.async.} =
+proc read*(self: StunConn): Future[UdpPacketInfo] {.async: (raises: [CancelledError]).} =
   if self.closed:
     debug "Try to read on an already closed StunConn"
     return

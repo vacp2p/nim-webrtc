@@ -18,7 +18,7 @@ logScope:
 # the remote address used by the underlying protocols (dtls/sctp etc...)
 
 type
-  WebRtcUdpError = object of WebRtcError
+  WebRtcUdpError* = object of WebRtcError
 
   UdpPacketInfo* = tuple
     message: seq[byte]
