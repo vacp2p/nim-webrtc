@@ -7,7 +7,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import bitops, strutils, random
+import strutils, random, bearssl
 import chronos,
        chronicles,
        binary_serialization,
@@ -21,20 +21,11 @@ logScope:
   topics = "webrtc stun"
 
 const
-  msgHeaderSize = 20
-  magicCookieSeq = @[ 0x21'u8, 0x12, 0xa4, 0x42 ]
+  stunMsgHeaderSize* = 20
+  stunMagicCookieSeq* = @[ 0x21'u8, 0x12, 0xa4, 0x42 ]
   magicCookie = 0x2112a442
   BindingRequest = 0x0001'u16
   BindingResponse = 0x0101'u16
-
-proc decode(T: typedesc[RawStunAttribute], cnt: seq[byte]): seq[RawStunAttribute] =
-  const pad = @[0, 3, 2, 1]
-  var padding = 0
-  while padding < cnt.len():
-    let attr = Binary.decode(cnt[padding ..^ 1], RawStunAttribute)
-    result.add(attr)
-    padding += 4 + attr.value.len()
-    padding += pad[padding mod 4]
 
 type
 #  Stun Header
@@ -69,9 +60,6 @@ type
     transactionId*: array[12, byte]
     attributes*: seq[RawStunAttribute]
 
-  Stun* = object
-    iceTiebreaker: uint64
-
 proc generateRandomSeq(size: int): seq[byte] =
   result = newSeq[byte](size)
   for i in 0..<size:
@@ -82,9 +70,6 @@ proc getAttribute(attrs: seq[RawStunAttribute], typ: uint16): Option[seq[byte]] 
     if attr.attributeType == typ:
       return some(attr.value)
   return none(seq[byte])
-
-proc isMessage*(T: typedesc[Stun], msg: seq[byte]): bool =
-  msg.len >= msgHeaderSize and msg[4..<8] == magicCookieSeq and bitand(0xC0'u8, msg[0]) == 0'u8
 
 proc addLength(msgEncoded: var seq[byte], length: uint16) =
   let
@@ -124,8 +109,7 @@ proc encode*(msg: StunMessage, userOpt: Option[seq[byte]] = none(seq[byte])): se
   result.addLength(8)
   result.add(Binary.encode(Fingerprint.encode(result)))
 
-proc getPong*(
-    T: typedesc[Stun],
+proc getBindingResponse*(
     msg: seq[byte],
     ta: TransportAddress
   ): Option[seq[byte]] =
@@ -156,16 +140,13 @@ proc getPong*(
   res.attributes.add(XorMappedAddress.encode(ta, sm.transactionId))
   return some(res.encode(sm.attributes.getAttribute(AttrUsername.uint16)))
 
-proc getPing*(
-    T: typedesc[Stun],
+proc getBindingRequest*(
     ta: TransportAddress,
     username: seq[byte] = @[],
     iceControlling: bool = true
   ): seq[byte] =
-  var res = StunMessage(msgType: BindingRequest,
-                        transactionId: generateRandomSeq(12))
-  if username != @[]:
-    res.attributes.add(UsernameAttribute.encode(username))
-
-proc new*(T: typedesc[Stun]): T =
-  result = T(iceTiebreaker: rand(uint64))
+    discard
+#  var res = StunMessage(msgType: BindingRequest,
+#                        transactionId: generateRandomSeq(12))
+#  if username != @[]:
+#    res.attributes.add(UsernameAttribute.encode(username))

@@ -85,6 +85,16 @@ type
     length* {.bin_value: it.value.len.}: uint16
     value* {.bin_len: it.length.}: seq[byte]
 
+proc decode*(T: typedesc[RawStunAttribute], cnt: seq[byte]): seq[RawStunAttribute] =
+  const pad = @[0, 3, 2, 1]
+  var padding = 0
+  while padding < cnt.len():
+    let attr = Binary.decode(cnt[padding ..^ 1], RawStunAttribute)
+    result.add(attr)
+    padding += 4 + attr.value.len()
+    padding += pad[padding mod 4]
+
+type
   StunAttributeEnum* = enum
     AttrMappedAddress = 0x0001
     AttrChangeRequest = 0x0003 # RFC5780 Nat Behavior Discovery

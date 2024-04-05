@@ -1,5 +1,5 @@
 import options, strutils
-import ../webrtc/stun/stun
+import ../webrtc/stun/stun_protocol
 import ../webrtc/stun/stun_attributes
 import ./asyncunit
 
@@ -49,7 +49,7 @@ suite "Stun message encoding/decoding":
                 0x36, 0xd8, 0x32, 0x44, 0x9b, 0x02, 0x38, 0xa7, 0x81, 0x64,
                 0x4d, 0xf1, 0xa7, 0x0e, 0x7b, 0xa0, 0x80, 0x28, 0x00, 0x04,
                 0x21, 0x9b, 0x7b, 0xac]
-    let response = Stun.getPong(msg, TransportAddress(initTAddress("127.0.0.1:4242")))
+    let response = getBindingResponse(msg, TransportAddress(initTAddress("127.0.0.1:4242")))
     check:
       response.isSome()
       response.get() == @[1'u8, 1, 0, 44, 33, 18, 164, 66, 85, 119, 75, 113, 82, 71, 49, 109, 80, 119, 103, 82, 0, 32, 0, 8, 0, 1, 49, 128, 94, 18, 164, 67, 0, 8, 0, 20, 108, 97, 248, 191, 152, 3, 6, 204, 50, 118, 190, 144, 193, 207, 113, 115, 248, 252, 186, 239, 128, 40, 0, 4, 86, 114, 133, 42]

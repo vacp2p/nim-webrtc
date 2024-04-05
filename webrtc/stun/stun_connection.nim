@@ -8,7 +8,7 @@
 # those terms.
 
 import chronos, chronicles
-import ../udp_connection, stun
+import ../udp_connection, stun_protocol
 
 logScope:
   topics = "webrtc stun"
@@ -22,38 +22,63 @@ logScope:
 
 type
   StunConn* = ref object
-    conn: UdpConn
-    laddr: TransportAddress
-    dataRecv: AsyncQueue[UdpPacketInfo]
-    handlesFut: Future[void]
-    closed: bool
+    conn*: UdpConn
+    laddr*: TransportAddress
+    raddr*: TransportAddress
+    dataRecv*: AsyncQueue[seq[byte]]
+    stunMsgs*: AsyncQueue[seq[byte]]
+    handlesFut*: Future[void]
+    closed*: bool
 
-proc handles(self: StunConn) {.async: (raises: [CancelledError]).} =
-  # Infinite read loop. When the message is a Stun Message, it returns the
-  # correct acknowledgement. When the message isn't a Stun Message, it is
-  # stored until it is read.
+# - Stun Messages Handler -
+# Read indefinitely Stun message and send a BindingResponse when receiving a
+# BindingRequest. It should work on a Browser to Server or Server to Server cases.
+# On the case of Browser to Browser, the ICE protocol will probably need to be
+# implemented, hence the name of the two handlers and the similar code.
+
+proc iceControlledHandles(self: StunConn) {.async: (raises: [CancelledError]).} =
   while true:
-    let packetInfo = await self.conn.read()
-    if Stun.isMessage(packetInfo.message):
-      let res = Stun.getPong(packetInfo.message, self.laddr)
-      if res.isSome():
-        try:
-          await self.conn.write(packetInfo.raddr, res.get())
-        except WebRtcUdpError as exc:
-          trace "Failed to write the Stun response", error=exc.msg
-          continue
-    else:
-      self.dataRecv.addLastNoWait(packetInfo)
+    let
+      message = await self.stunMsgs.popFirst()
+      res = getBindingResponse(message, self.laddr)
+    if res.isSome():
+      try:
+        await self.conn.write(self.raddr, res.get())
+      except WebRtcUdpError as exc:
+        trace "Failed to write the Stun response", error=exc.msg
+        continue
 
-proc init*(T: type StunConn, conn: UdpConn, laddr: TransportAddress): T =
+proc iceControllingHandles(self: StunConn) {.async: (raises: [CancelledError]).} =
+  while true:
+    let
+      message = await self.stunMsgs.popFirst()
+      res = getBindingResponse(message, self.laddr)
+    if res.isSome():
+      try:
+        await self.conn.write(self.raddr, res.get())
+      except WebRtcUdpError as exc:
+        trace "Failed to write the Stun response", error=exc.msg
+        continue
+
+proc init*(
+    T: type StunConn,
+    conn: UdpConn,
+    raddr: TransportAddress,
+    isServer: bool
+  ): T =
   ## Initialize a Stun Connection
   ##
   var self = T()
   self.conn = conn
-  self.laddr = laddr
+  self.laddr = conn.laddr
+  self.raddr = raddr
   self.closed = false
-  self.dataRecv = newAsyncQueue[UdpPacketInfo]()
-  self.handlesFut = self.handles()
+  self.dataRecv = newAsyncQueue[seq[byte]]()
+  self.stunMsgs = newAsyncQueue[seq[byte]]()
+  if isServer:
+    self.handlesFut = self.iceControllingHandles()
+  else:
+    self.handlesFut = self.iceControlledHandles()
   return self
 
 proc close*(self: StunConn) =
@@ -63,14 +88,14 @@ proc close*(self: StunConn) =
     debug "Try to close an already closed StunConn"
     return
   self.closed = true
-  self.handlesFut.cancel()
+  self.handlesFut.cancelSoon()
   self.conn.close()
 
 proc write*(
     self: StunConn,
     raddr: TransportAddress,
     msg: seq[byte]
-  ) {.async: (raises: [CancelledError, WebRtcUdpError].} =
+  ) {.async: (raises: [CancelledError, WebRtcUdpError]).} =
   ## Write a message on Udp to a remote `raddr` using
   ## the underlying Udp Connection
   ##
@@ -85,4 +110,4 @@ proc read*(self: StunConn): Future[UdpPacketInfo] {.async: (raises: [CancelledEr
   if self.closed:
     debug "Try to read on an already closed StunConn"
     return
-  return await self.dataRecv.popFirst()
+  return (await self.dataRecv.popFirst(), self.raddr)
