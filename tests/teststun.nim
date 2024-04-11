@@ -1,7 +1,22 @@
+{.used.}
+
 import options, strutils
+import bearssl
 import ../webrtc/stun/stun_protocol
 import ../webrtc/stun/stun_attributes
+import ../webrtc/stun/stun_utils
 import ./asyncunit
+
+proc newRng(): ref HmacDrbgContext =
+  var seeder = prngSeederSystem(nil)
+  if seeder == nil:
+    return nil
+
+  var rng = (ref HmacDrbgContext)()
+  hmacDrbgInit(rng[], addr sha256Vtable, nil, 0)
+  if seeder(addr rng.vtable) == 0:
+    return nil
+  rng
 
 suite "Stun message encoding/decoding":
   test "Stun decoding":
@@ -61,7 +76,7 @@ suite "Stun message encoding/decoding":
     expect AssertionDefect: discard StunMessage.decode(msgAttrFailed)
 
   test "genUfrag":
-    let s = genUfrag(20)
+    let s = genUfrag(newRng(), 20)
     check s.len() == 20
     for c in s:
       check isAlphaNumeric(c.chr())
