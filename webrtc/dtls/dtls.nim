@@ -9,7 +9,7 @@
 
 import times, deques, tables, sequtils
 import chronos, chronicles
-import ./utils, ../stun/stun_connection
+import ./utils, ../stun/stun_connection, ../errors
 
 import mbedtls/ssl
 import mbedtls/ssl_cookie
@@ -47,12 +47,11 @@ const PendingHandshakeLimit = 1024
 # the Udp "connection"
 
 type
-  DtlsError* = object of CatchableError
   DtlsConn* = ref object
     conn: StunConn
     laddr: TransportAddress
     raddr*: TransportAddress
-    dataRecv: AsyncQueue[seq[byte]]
+    dataRecv: seq[byte]
     sendFuture: Future[void]
     closed: bool
     closeEvent: AsyncEvent
@@ -70,17 +69,24 @@ type
     localCert: seq[byte]
     remoteCert: seq[byte]
 
-proc init(self: DtlsConn, conn: StunConn, laddr: TransportAddress) =
-  self.conn = conn
-  self.laddr = laddr
-  self.dataRecv = newAsyncQueue[seq[byte]]()
+proc init(T: type DtlsConn, conn: StunConn, laddr: TransportAddress): T =
+  ## Initialize a Dtls Connection
+  ##
+  var self = T(conn: conn, laddr: laddr)
+  self.raddr = conn.raddr
   self.closed = false
   self.closeEvent = newAsyncEvent()
+  return self
 
-proc join(self: DtlsConn) {.async.} =
+proc join*(self: DtlsConn) {.async: (raises: [CancelledError]).} =
+  ## Wait for the Dtls Connection to be closed
+  ##
   await self.closeEvent.wait()
 
-proc dtlsHandshake(self: DtlsConn, isServer: bool) {.async.} =
+proc dtlsHandshake(
+    self: DtlsConn,
+    isServer: bool
+  ) {.async: (raises: [CancelledError, WebRtcError].} =
   var shouldRead = isServer
   while self.ssl.private_state != MBEDTLS_SSL_HANDSHAKE_OVER:
     if shouldRead:
@@ -91,9 +97,8 @@ proc dtlsHandshake(self: DtlsConn, isServer: bool) {.async.} =
         of AddressFamily.IPv6:
           mb_ssl_set_client_transport_id(self.ssl, self.raddr.address_v6)
         else:
-          raise newException(DtlsError, "Remote address isn't an IP address")
-      let tmp = await self.dataRecv.popFirst()
-      self.dataRecv.addFirstNoWait(tmp)
+          raise newException(WebRtcError, "DTLS - Remote address isn't an IP address")
+      self.dataRecv = await self.conn.read()
     self.sendFuture = nil
     let res = mb_ssl_handshake_step(self.ssl)
     if not self.sendFuture.isNil():
@@ -109,11 +114,13 @@ proc dtlsHandshake(self: DtlsConn, isServer: bool) {.async.} =
       shouldRead = isServer
       continue
     elif res != 0:
-      raise newException(DtlsError, $(res.mbedtls_high_level_strerr()))
+      raise newException(WebRtcError, "DTLS - " & $(res.mbedtls_high_level_strerr()))
 
-proc close*(self: DtlsConn) {.async.} =
+proc close*(self: DtlsConn) {.async: (raises: [CancelledError]).} =
+  ## Close a Dtls Connection
+  ##
   if self.closed:
-    debug "Try to close DtlsConn twice"
+    debug "Try to close an already closed DtlsConn"
     return
 
   self.closed = true
@@ -125,16 +132,20 @@ proc close*(self: DtlsConn) {.async.} =
   self.closeEvent.fire()
 
 proc write*(self: DtlsConn, msg: seq[byte]) {.async.} =
+  ## Write a message using mbedtls_ssl_write
+  ##
+  # Mbed-TLS will wrap the message properly and call `dtlsSend` callback.
+  # `dtlsSend` will write the message on the higher Stun connection.
   if self.closed:
     debug "Try to write on an already closed DtlsConn"
     return
   var buf = msg
   try:
-    let sendFuture = newFuture[void]("DtlsConn write")
     self.sendFuture = nil
     let write = mb_ssl_write(self.ssl, buf)
     if not self.sendFuture.isNil():
-      await self.sendFuture
+      let sendFuture = self.sendFuture
+      await sendFuture
     trace "Dtls write", msgLen = msg.len(), actuallyWrote = write
   except MbedTLSError as exc:
     trace "Dtls write error", errorMsg = exc.msg
@@ -146,32 +157,25 @@ proc read*(self: DtlsConn): Future[seq[byte]] {.async.} =
     return
   var res = newSeq[byte](8192)
   while true:
-    let tmp = await self.dataRecv.popFirst()
-    self.dataRecv.addFirstNoWait(tmp)
+    self.dataRecv = await self.conn.read()
     # TODO: Find a clear way to use the template `mb_ssl_read` without
     #       messing up things with exception
     let length = mbedtls_ssl_read(addr self.ssl, cast[ptr byte](addr res[0]), res.len().uint)
     if length == MBEDTLS_ERR_SSL_WANT_READ:
       continue
     if length < 0:
-      raise newException(DtlsError, $(length.cint.mbedtls_high_level_strerr()))
+      raise newException(WebRtcError, "DTLS - " & $(length.cint.mbedtls_high_level_strerr()))
     res.setLen(length)
     return res
 
 # -- Dtls --
-# The Dtls object read every messages from the UdpConn/StunConn and, if the address
-# is not yet stored in the Table `Connection`, adds it to the `pendingHandshake` queue
-# to be accepted later, if the address is stored, add the message received to the
-# corresponding DtlsConn `dataRecv` queue.
 
 type
   Dtls* = ref object of RootObj
     connections: Table[TransportAddress, DtlsConn]
-    pendingHandshakes: AsyncQueue[(TransportAddress, seq[byte])]
-    conn: StunConn
+    transport: Stun
     laddr: TransportAddress
     started: bool
-    readLoop: Future[void]
     ctr_drbg: mbedtls_ctr_drbg_context
     entropy: mbedtls_entropy_context
 
@@ -187,25 +191,13 @@ proc updateOrAdd(aq: AsyncQueue[(TransportAddress, seq[byte])],
       return
   aq.addLastNoWait((raddr, buf))
 
-proc init*(self: Dtls, conn: StunConn, laddr: TransportAddress) =
-  if self.started:
-    warn "Already started"
-    return
-
-  proc readLoop() {.async.} =
-    while true:
-      let (buf, raddr) = await self.conn.read()
-      if self.connections.hasKey(raddr):
-        self.connections[raddr].dataRecv.addLastNoWait(buf)
-      else:
-        self.pendingHandshakes.updateOrAdd(raddr, buf)
+proc init*(T: type Dtls, transport: Stun, laddr: TransportAddress): T =
+  var self = T()
 
   self.connections = initTable[TransportAddress, DtlsConn]()
-  self.pendingHandshakes = newAsyncQueue[(TransportAddress, seq[byte])](PendingHandshakeLimit)
   self.conn = conn
   self.laddr = laddr
   self.started = true
-  self.readLoop = readLoop()
 
   mb_ctr_drbg_init(self.ctr_drbg)
   mb_entropy_init(self.entropy)
@@ -222,7 +214,6 @@ proc stop*(self: Dtls) {.async.} =
     return
 
   await allFutures(toSeq(self.connections.values()).mapIt(it.close()))
-  self.readLoop.cancel()
   self.started = false
 
 # -- Remote / Local certificate getter --
@@ -273,21 +264,23 @@ proc dtlsRecv(ctx: pointer, buf: ptr byte, len: uint): cint {.cdecl.} =
   if self.dataRecv.len() == 0:
     return MBEDTLS_ERR_SSL_WANT_READ
 
-  var dataRecv = self.dataRecv.popFirstNoWait()
-  copyMem(buf, addr dataRecv[0], dataRecv.len())
-  result = dataRecv.len().cint
+  copyMem(buf, addr self.dataRecv[0], self.dataRecv.len())
+  result = self.dataRecv.len().cint
+  self.dataRecv = @[]
   trace "dtls receive", len, result
 
 # -- Dtls Accept / Connect procedures --
 
-proc removeConnection(self: Dtls, conn: DtlsConn, raddr: TransportAddress) {.async.} =
+proc cleanupDtlsConn(self: Dtls, conn: DtlsConn) {.async.} =
+  # Waiting for a connection to be closed to remove it from the table
   await conn.join()
-  self.connections.del(raddr)
+  self.connections.del(conn.raddr)
 
 proc accept*(self: Dtls): Future[DtlsConn] {.async.} =
-  var res = DtlsConn()
+  ## Accept a Dtls Connection
+  ##
+  var res = DtlsConn.init(await self.transport.accept(), self.laddr)
 
-  res.init(self.conn, self.laddr)
   mb_ssl_init(res.ssl)
   mb_ssl_config_init(res.config)
   mb_ssl_cookie_init(res.cookie)
@@ -300,10 +293,12 @@ proc accept*(self: Dtls): Future[DtlsConn] {.async.} =
   var srvcert = self.serverCert
   res.localCert = self.localCert
 
-  mb_ssl_config_defaults(res.config,
-                         MBEDTLS_SSL_IS_SERVER,
-                         MBEDTLS_SSL_TRANSPORT_DATAGRAM,
-                         MBEDTLS_SSL_PRESET_DEFAULT)
+  mb_ssl_config_defaults(
+    res.config,
+    MBEDTLS_SSL_IS_SERVER,
+    MBEDTLS_SSL_TRANSPORT_DATAGRAM,
+    MBEDTLS_SSL_PRESET_DEFAULT
+  )
   mb_ssl_conf_rng(res.config, mbedtls_ctr_drbg_random, res.ctr_drbg)
   mb_ssl_conf_read_timeout(res.config, 10000) # in milliseconds
   mb_ssl_conf_ca_chain(res.config, srvcert.next, nil)
@@ -317,24 +312,22 @@ proc accept*(self: Dtls): Future[DtlsConn] {.async.} =
   mb_ssl_conf_authmode(res.config, MBEDTLS_SSL_VERIFY_OPTIONAL)
   mb_ssl_set_bio(res.ssl, cast[pointer](res), dtlsSend, dtlsRecv, nil)
   while true:
-    let (raddr, buf) = await self.pendingHandshakes.popFirst()
     try:
-      res.raddr = raddr
-      res.dataRecv.addLastNoWait(buf)
-      self.connections[raddr] = res
+      self.connections[res.raddr] = res
       await res.dtlsHandshake(true)
-      asyncSpawn self.removeConnection(res, raddr)
+      asyncSpawn self.removeConnection(res)
       break
-    except CatchableError as exc:
-      trace "Handshake fail", remoteAddress = raddr, error = exc.msg
-      self.connections.del(raddr)
-      continue
+    except WebRtcError as exc:
+      trace "Handshake fails, try accept another connection",
+            remoteAddress = res.raddr, error = exc.msg
+      self.connections.del(res.raddr)
+      res.conn = await self.transport.accept()
   return res
 
 proc connect*(self: Dtls, raddr: TransportAddress): Future[DtlsConn] {.async.} =
-  var res = DtlsConn()
+  ## Connect to a remote address, creating a Dtls Connection
+  var res = DtlsConn.init(await self.transport.connect(raddr), self.laddr)
 
-  res.init(self.conn, self.laddr)
   mb_ssl_init(res.ssl)
   mb_ssl_config_init(res.config)
 
@@ -363,14 +356,12 @@ proc connect*(self: Dtls, raddr: TransportAddress): Future[DtlsConn] {.async.} =
   mb_ssl_conf_authmode(res.config, MBEDTLS_SSL_VERIFY_OPTIONAL)
   mb_ssl_set_bio(res.ssl, cast[pointer](res), dtlsSend, dtlsRecv, nil)
 
-  res.raddr = raddr
-  self.connections[raddr] = res
-
   try:
+    self.connections[raddr] = res
     await res.dtlsHandshake(false)
-    asyncSpawn self.removeConnection(res, raddr)
-  except CatchableError as exc:
-    trace "Handshake fail", remoteAddress = raddr, error = exc.msg
+    asyncSpawn self.removeConnection(res)
+  except WebRtcError as exc:
+    trace "Handshake fails", remoteAddress = raddr, error = exc.msg
     self.connections.del(raddr)
     raise exc
 
