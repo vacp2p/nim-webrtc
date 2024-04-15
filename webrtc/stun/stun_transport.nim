@@ -14,6 +14,10 @@ import stun_connection, stun_protocol, ../udp_connection
 logScope:
   topics = "webrtc stun stun_transport"
 
+const
+  StunMaxConnections = 1024
+  StunMaxPendingConnections = 256
+
 type
   Stun* = ref object
     connections: Table[TransportAddress, StunConn]
@@ -23,7 +27,7 @@ type
     iceTiebreaker: uint64
     rng: ref HmacDrbgContext
 
-proc accept*(self: Stun): Future[StunConn] {.async.} =
+proc accept*(self: Stun): Future[StunConn] {.async: (raises: [CancelledError]).} =
   ## Accept a Stun Connection
   ##
   var res: StunConn
@@ -33,11 +37,17 @@ proc accept*(self: Stun): Future[StunConn] {.async.} =
       break
   return res
 
-proc connect*(self: Stun, raddr: TransportAddress): Future[StunConn] {.async.} =
+proc connect*(
+    self: Stun,
+    raddr: TransportAddress
+  ): Future[StunConn] {.async: (raises: []).} =
   ## Connect to a remote address, creating a Stun Connection
   ##
   if self.connections.hasKey(raddr):
-    return self.connections[raddr]
+    try:
+      return self.connections[raddr]
+    except KeyError as exc:
+      doAssert(false, "Should never happen")
   var res = StunConn.init(self.conn, raddr, false)
   self.connections[raddr] = res
   return res
@@ -50,23 +60,28 @@ proc cleanupStunConn(self: Stun, conn: StunConn) {.async: (raises: []).} =
   except CancelledError as exc:
     warn "Error cleaning up Stun Connection", error=exc.msg
 
-proc stunReadLoop(self: Stun) {.async.} =
+proc stunReadLoop(self: Stun) {.async: (raises: [CancelledError]).} =
   while true:
     let (buf, raddr) = await self.conn.read()
-    let stunConn =
-      if not self.connections.hasKey(raddr):
-        let res = StunConn.init(self.conn, raddr, true)
-        self.connections[raddr] = res
-        self.pendingConn.addLastNoWait(res)
-        asyncSpawn self.cleanupStunConn(res)
-        res
-      else:
-        self.connections[raddr]
+    var stunConn: StunConn
+    if not self.connections.hasKey(raddr):
+      if self.connections.len() >= StunMaxConnections:
+        trace "Try to accept a connection while full"
+        continue
+      stunConn = StunConn.init(self.conn, raddr, true)
+      self.connections[raddr] = stunConn
+      await self.pendingConn.addLast(stunConn)
+      asyncSpawn self.cleanupStunConn(stunConn)
+    else:
+      try:
+        stunConn = self.connections[raddr]
+      except KeyError as exc:
+        doAssert(false, "Should never happen")
 
     if isStunMessage(buf):
-      stunConn.stunMsgs.addLastNoWait(buf)
+      await stunConn.stunMsgs.addLast(buf)
     else:
-      stunConn.dataRecv.addLastNoWait(buf)
+      await stunConn.dataRecv.addLast(buf)
 
 proc stop(self: Stun) =
   ## Stop the Stun transport and close all the connections
@@ -85,4 +100,5 @@ proc init*(
   var self = T(conn: conn, rng: rng)
   self.rng.generate(self.iceTieBreaker)
   self.readingLoop = stunReadLoop()
+  self.pendingConn = newAsyncQueue[StunConn](StunMaxPendingConnections)
   return self
