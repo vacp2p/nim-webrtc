@@ -71,5 +71,3 @@ jobs:
           nim --version
           nimble --version
           nimble test
-          # nim c examples/ping.nim
-          # nim c examples/pong.nim
