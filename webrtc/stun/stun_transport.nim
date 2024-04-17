@@ -14,10 +14,6 @@ import stun_connection, stun_protocol, ../udp_connection
 logScope:
   topics = "webrtc stun stun_transport"
 
-const
-  StunMaxConnections = 1024
-  StunMaxPendingConnections = 256
-
 type
   Stun* = ref object
     connections: Table[TransportAddress, StunConn]
@@ -65,9 +61,6 @@ proc stunReadLoop(self: Stun) {.async: (raises: [CancelledError]).} =
     let (buf, raddr) = await self.conn.read()
     var stunConn: StunConn
     if not self.connections.hasKey(raddr):
-      if self.connections.len() >= StunMaxConnections:
-        trace "Try to accept a connection while full"
-        continue
       stunConn = StunConn.init(self.conn, raddr, true)
       self.connections[raddr] = stunConn
       await self.pendingConn.addLast(stunConn)
@@ -100,5 +93,5 @@ proc init*(
   var self = T(conn: conn, rng: rng)
   self.rng.generate(self.iceTieBreaker)
   self.readingLoop = stunReadLoop()
-  self.pendingConn = newAsyncQueue[StunConn](StunMaxPendingConnections)
+  self.pendingConn = newAsyncQueue[StunConn]()
   return self
