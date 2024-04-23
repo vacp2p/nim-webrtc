@@ -204,3 +204,47 @@ proc encode*(T: typedesc[MessageIntegrity], msg: seq[byte], key: seq[byte]): Raw
   let value = Binary.encode(T(msgInt: hmacSha1(key, msg)))
   result = RawStunAttribute(attributeType: AttrMessageIntegrity.uint16,
                             length: value.len().uint16, value: value)
+
+# Priority
+# https://datatracker.ietf.org/doc/html/rfc8445#section-7.1.1
+# https://datatracker.ietf.org/doc/html/rfc8445#section-5.1.2
+
+type
+  Priority* = object
+    priority: uint32
+
+proc encode*(T: typedesc[Priority], priority: uint32): RawStunAttribute =
+  let value = Binary.encode(T(priority: priority))
+  result = RawStunAttribute(attributeType: AttrPriority.uint16,
+                            length: value.len().uint16, value: value)
+
+# Use-Candidate
+# https://datatracker.ietf.org/doc/html/rfc8445#section-7.1.2
+# https://datatracker.ietf.org/doc/html/rfc8445#section-8.1.1
+# Use-Candidate is empty because it's used as a flag
+
+type UseCandidate* = object
+
+proc encode*(T: typedesc[UseCandidate]): RawStunAttribute =
+  RawStunAttribute(attributeType: AttrUseCandidate.uint16, length: 0, value: @[])
+
+# Ice-Controlling / Ice-Controlled
+# https://datatracker.ietf.org/doc/html/rfc8445#section-7.1.3
+# https://datatracker.ietf.org/doc/html/rfc8445#section-7.3.1.1
+
+type
+  IceControlling* = object
+    tieBreaker: uint32
+
+  IceControlled* = object
+    tieBreaker: uint32
+
+proc encode*(T: typedesc[IceControlling], tieBreaker: uint32): RawStunAttribute =
+  let value = Binary.encode(T(tieBreaker: tieBreaker))
+  result = RawStunAttribute(attributeType: AttrICEControlling.uint16,
+                            length: value.len().uint16, value: value)
+
+proc encode*(T: typedesc[IceControlled], tieBreaker: uint32): RawStunAttribute =
+  let value = Binary.encode(T(tieBreaker: tieBreaker))
+  result = RawStunAttribute(attributeType: AttrICEControlled.uint16,
+                            length: value.len().uint16, value: value)
