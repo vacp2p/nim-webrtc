@@ -28,8 +28,6 @@ import stun_utils
 # +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 
 type
-  StunAttributeEncodingError* = object of CatchableError
-
   RawStunAttribute* = object
     attributeType*: uint16
     length* {.bin_value: it.value.len.}: uint16
@@ -96,7 +94,7 @@ proc isOptional*(typ: uint16): bool = typ >= 0x8000'u16
 type
   UsernameAttribute* = object
 
-proc encode(T: typedesc[UsernameAttribute], username: seq[byte]): RawStunAttribute =
+proc encode*(T: typedesc[UsernameAttribute], username: seq[byte]): RawStunAttribute =
   result = RawStunAttribute(attributeType: AttrUsername.uint16,
                             length: username.len().uint16,
                             value: username)
@@ -108,7 +106,7 @@ type
   ErrorCodeEnum* = enum
     ECTryAlternate = 300
     ECBadRequest = 400
-    ECUnauthenticated = 401
+    ECUnauthorized = 401
     ECUnknownAttribute = 420
     ECStaleNonce = 438
     ECServerError = 500

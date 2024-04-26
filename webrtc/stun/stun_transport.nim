@@ -9,7 +9,7 @@
 
 import tables
 import chronos, chronicles, bearssl
-import stun_connection, stun_protocol, ../udp_connection
+import stun_connection, stun_message, ../udp_connection
 
 logScope:
   topics = "webrtc stun stun_transport"
@@ -20,7 +20,6 @@ type
     pendingConn: AsyncQueue[StunConn]
     readingLoop: Future[void]
     conn: UdpConn
-    iceTiebreaker: uint64
     rng: ref HmacDrbgContext
 
 proc accept*(self: Stun): Future[StunConn] {.async: (raises: [CancelledError]).} =
@@ -44,7 +43,7 @@ proc connect*(
       return self.connections[raddr]
     except KeyError as exc:
       doAssert(false, "Should never happen")
-  var res = StunConn.init(self.conn, raddr, false)
+  var res = StunConn.init(self.conn, raddr, false, self.rng)
   self.connections[raddr] = res
   return res
 
@@ -61,7 +60,7 @@ proc stunReadLoop(self: Stun) {.async: (raises: [CancelledError]).} =
     let (buf, raddr) = await self.conn.read()
     var stunConn: StunConn
     if not self.connections.hasKey(raddr):
-      stunConn = StunConn.init(self.conn, raddr, true)
+      stunConn = StunConn.init(self.conn, raddr, true, self.rng)
       self.connections[raddr] = stunConn
       await self.pendingConn.addLast(stunConn)
       asyncSpawn self.cleanupStunConn(stunConn)
@@ -91,7 +90,6 @@ proc init*(
   ## Initialize the Stun transport
   ##
   var self = T(conn: conn, rng: rng)
-  self.rng.generate(self.iceTieBreaker)
   self.readingLoop = stunReadLoop()
   self.pendingConn = newAsyncQueue[StunConn]()
   return self

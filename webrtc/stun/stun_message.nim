@@ -12,7 +12,6 @@ import chronos,
        bearssl,
        chronicles,
        binary_serialization,
-       stew/objects,
        stew/byteutils
 import stun_attributes, ../errors
 
@@ -25,8 +24,6 @@ const
   StunMsgHeaderSize = 20
   StunMagicCookieSeq = @[ 0x21'u8, 0x12, 0xa4, 0x42 ]
   StunMagicCookie = 0x2112a442
-  StunBindingRequest = 0x0001'u16
-  StunBindingResponse = 0x0101'u16
 
 proc isStunMessage*(msg: seq[byte]): bool =
   msg.len >= StunMsgHeaderSize and
@@ -66,9 +63,9 @@ type
     transactionId*: array[12, byte]
     attributes*: seq[RawStunAttribute]
 
-proc getAttribute(attrs: seq[RawStunAttribute], typ: uint16): Option[seq[byte]] =
-  for attr in attrs:
-    if attr.attributeType == typ:
+proc getAttribute*(self: StunMessage, typ: StunAttributeEnum): Option[seq[byte]] =
+  for attr in self.attributes:
+    if attr.attributeType == typ.uint16:
       return some(attr.value)
   return none(seq[byte])
 
@@ -110,46 +107,3 @@ proc encode*(msg: StunMessage, userOpt: Option[seq[byte]] = none(seq[byte])): se
 
   result.addLength(8)
   result.add(Binary.encode(Fingerprint.encode(result)))
-
-proc getBindingResponse*(
-    msg: seq[byte],
-    ta: TransportAddress
-  ): Option[seq[byte]] =
-  ## Takes an encoded Stun Message and the local address. Returns
-  ## an encoded Binding Response if the received message is a
-  ## Binding request.
-  ##
-  if ta.family != AddressFamily.IPv4 and ta.family != AddressFamily.IPv6:
-    return none(seq[byte])
-  let sm =
-    try:
-      StunMessage.decode(msg)
-    except CatchableError as exc:
-      return none(seq[byte])
-
-  if sm.msgType != StunBindingRequest:
-    return none(seq[byte])
-
-  var res = StunMessage(msgType: StunBindingResponse,
-                        transactionId: sm.transactionId)
-
-  var unknownAttr: seq[uint16]
-  for attr in sm.attributes:
-    let typ = attr.attributeType
-    if typ.isRequired() and typ notin StunAttributeEnum:
-      unknownAttr.add(typ)
-  if unknownAttr.len() > 0:
-    res.attributes.add(ErrorCode.encode(ECUnknownAttribute))
-    res.attributes.add(UnknownAttribute.encode(unknownAttr))
-    return some(res.encode(sm.attributes.getAttribute(AttrUsername.uint16)))
-
-  res.attributes.add(XorMappedAddress.encode(ta, sm.transactionId))
-  return some(res.encode(sm.attributes.getAttribute(AttrUsername.uint16)))
-
-proc getBindingRequest*(
-    ta: TransportAddress,
-    username: seq[byte] = @[],
-    iceControlling: bool = true
-  ): seq[byte] =
-  ## TODO (browser to browser) Creates an encoded Binding Request
-  discard
