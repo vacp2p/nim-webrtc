@@ -99,6 +99,11 @@ proc encode*(T: typedesc[UsernameAttribute], username: seq[byte]): RawStunAttrib
                             length: username.len().uint16,
                             value: username)
 
+proc encode*(T: typedesc[UsernameAttribute], username: string): RawStunAttribute =
+  result = RawStunAttribute(attributeType: AttrUsername.uint16,
+                            length: username.len().uint16,
+                            value: username.toBytes())
+
 # Error Code
 # https://datatracker.ietf.org/doc/html/rfc5389#section-15.6
 

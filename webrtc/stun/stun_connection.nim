@@ -7,9 +7,9 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import strutils, bitops
+import strutils
 import bearssl, chronos, chronicles, stew/[objects, byteutils]
-import ../[udp_connection, errors], stun_message, stun_attributes
+import ../[udp_connection, errors], stun_message, stun_attributes, stun_utils
 
 logScope:
   topics = "webrtc stun stun_connection"
@@ -24,17 +24,19 @@ const
 
 type
   StunConn* = ref object
-    conn*: UdpConn
-    laddr*: TransportAddress
-    raddr*: TransportAddress
-    dataRecv*: AsyncQueue[seq[byte]]
-    stunMsgs*: AsyncQueue[seq[byte]]
-    handlesFut*: Future[void]
+    conn*: UdpConn # Underlying UDP connexion
+    laddr*: TransportAddress # Local address
+    raddr*: TransportAddress # Remote address
+    dataRecv*: AsyncQueue[seq[byte]] # data received which will be read by DTLS
+    stunMsgs*: AsyncQueue[seq[byte]] # stun messages received and to be
+                                     # processed by the stun message handler
+    handlesFut*: Future[void] # Stun Message handler
     closeEvent: AsyncEvent
     closed*: bool
 
+    # Is ice-controlling and iceTiebreaker, not fully implemented yet.
     iceControlling: bool
-    iceTiebreaker: uint64
+    iceTiebreaker: uint32
 
     rng: ref HmacDrbgContext
 
@@ -49,27 +51,27 @@ proc getBindingResponse*(self: StunConn, msg: StunMessage): StunMessage =
                         transactionId: msg.transactionId)
   result.attributes.add(XorMappedAddress.encode(self.raddr, msg.transactionId))
 
-proc calculatePriority(self: StunConn): uint =
+proc calculatePriority(self: StunConn): uint32 =
   # https://datatracker.ietf.org/doc/html/rfc8445#section-5.1.2.1
   # Calculate Ice priority. At the moment, we assume we're a publicly available server.
-  let typePreference = 126
-  let localPreference = 65535
-  let componentID = 1
+  let typePreference = 126'u32
+  let localPreference = 65535'u32
+  let componentID = 1'u32
   return (1 shl 24) * typePreference + (1 shl 8) * localPreference + (256 - componentID)
 
-proc getBindingRequest*(self: StunConn, username: string= ""): StunMessage =
+proc getBindingRequest*(self: StunConn, username: string = ""): StunMessage =
   ## Creates an encoded Binding Request
   ##
-  result = StunMessage(msgType: StunBindingRequest,
-                        transactionId: self.rng.generateRandomSeq(12))
-  let ufrag = self.rng.genUfrag(32)
+  result = StunMessage(msgType: StunBindingRequest)
+  self.rng[].generate(result.transactionId)
+  let ufrag = string.fromBytes(self.rng.genUfrag(32))
   let username = "libp2p+webrtc+v1/" & ufrag
   result.attributes.add(UsernameAttribute.encode(username & ":" & username))
   if self.iceControlling:
     result.attributes.add(IceControlling.encode(self.iceTiebreaker))
   else:
     result.attributes.add(IceControlled.encode(self.iceTiebreaker))
-  result.attributes.add(Priority.encode(calculatePriority))
+  result.attributes.add(Priority.encode(self.calculatePriority()))
 
 proc checkForError*(msg: StunMessage): Option[StunMessage] =
   # Check for error from a BindingRequest message.
@@ -150,11 +152,11 @@ proc init*(
     closeEvent: newAsyncEvent(),
     dataRecv: newAsyncQueue[seq[byte]](),
     stunMsgs: newAsyncQueue[seq[byte]](),
-    handlesFut: self.stunMessageHandler(),
     iceControlling: iceControlling,
-    iceTiebreaker: rng[].generate(uint64),
+    iceTiebreaker: rng[].generate(uint32),
     rng: rng
   )
+  self.handlesFut = self.stunMessageHandler()
   return self
 
 proc join*(self: StunConn) {.async: (raises: [CancelledError]).} =
