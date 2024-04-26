@@ -7,7 +7,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import strutils
+import strutils, bitops
 import bearssl, chronos, chronicles, stew/[objects, byteutils]
 import ../[udp_connection, errors], stun_message, stun_attributes
 
@@ -32,41 +32,46 @@ type
     handlesFut*: Future[void]
     closeEvent: AsyncEvent
     closed*: bool
+
+    iceControlling: bool
     iceTiebreaker: uint64
+
     rng: ref HmacDrbgContext
 
 # - Create Binding Messages (Request / Response / Error)
 
-proc getBindingResponse(self: StunConn, msg: StunMessage): StunMessage =
+proc getBindingResponse*(self: StunConn, msg: StunMessage): StunMessage =
   ## Takes an encoded Stun Message and the local address. Returns
   ## an encoded Binding Response if the received message is a
   ## Binding request.
   ##
-  var res = StunMessage(msgType: StunBindingResponse,
+  result = StunMessage(msgType: StunBindingResponse,
                         transactionId: msg.transactionId)
-  res.attributes.add(XorMappedAddress.encode(self.raddr, msg.transactionId))
-  return res
+  result.attributes.add(XorMappedAddress.encode(self.raddr, msg.transactionId))
 
-proc getBindingRequest(
-    ta: TransportAddress,
-    username: seq[byte] = @[],
-    transactionId: array[12, byte],
-    iceControlling: bool = true
-  ): seq[byte] =
+proc calculatePriority(self: StunConn): uint =
+  # https://datatracker.ietf.org/doc/html/rfc8445#section-5.1.2.1
+  # Calculate Ice priority. At the moment, we assume we're a publicly available server.
+  let typePreference = 126
+  let localPreference = 65535
+  let componentID = 1
+  return (1 shl 24) * typePreference + (1 shl 8) * localPreference + (256 - componentID)
+
+proc getBindingRequest*(self: StunConn, username: string= ""): StunMessage =
   ## Creates an encoded Binding Request
   ##
-  var res = StunMessage(msgType: StunBindingRequest,
-                        transactionId: transactionId)
-  res.attributes.add(UsernameAttribute.encode(username))
- # if iceControlling:
- #   res.attributes.add(IceControlling.encode()) # TODO
- # else:
- #   res.attributes.add(IceControlled.encode()) # TODO
- # res.attributes.add(Priority.encode()) # TODO
-  # return encode(...)
-  discard
+  result = StunMessage(msgType: StunBindingRequest,
+                        transactionId: self.rng.generateRandomSeq(12))
+  let ufrag = self.rng.genUfrag(32)
+  let username = "libp2p+webrtc+v1/" & ufrag
+  result.attributes.add(UsernameAttribute.encode(username & ":" & username))
+  if self.iceControlling:
+    result.attributes.add(IceControlling.encode(self.iceTiebreaker))
+  else:
+    result.attributes.add(IceControlled.encode(self.iceTiebreaker))
+  result.attributes.add(Priority.encode(calculatePriority))
 
-proc checkForError(msg: StunMessage): Option[StunMessage] =
+proc checkForError*(msg: StunMessage): Option[StunMessage] =
   # Check for error from a BindingRequest message.
   # Returns an option with some BindingErrorResponse if there is an error.
   # Returns none otherwise.
@@ -100,10 +105,10 @@ proc checkForError(msg: StunMessage): Option[StunMessage] =
   return none(StunMessage)
 
 # - Stun Messages Handler -
-# Read indefinitely Stun message and send a BindingResponse when receiving a
-# BindingRequest.
 
 proc stunMessageHandler(self: StunConn) {.async: (raises: [CancelledError]).} =
+  # Read indefinitely Stun messages from stunMsgs queue.
+  # Sends a BindingResponse or BindingResponseError after receiving a BindingRequest.
   while true:
     let message = await self.stunMsgs.popFirst()
     try:
@@ -111,16 +116,18 @@ proc stunMessageHandler(self: StunConn) {.async: (raises: [CancelledError]).} =
       if decoded.msgType == StunBindingErrorResponse:
         trace "Received a STUN error", decoded, remote = self.raddr
         continue
-      if decoded.msgType == StunBindingResponse:
+      elif decoded.msgType == StunBindingResponse:
         # TODO: Handle it
         continue
-      let errorOpt = checkForError(decoded)
-      if errorOpt.isSome():
-        let error = errorOpt.get()
-        await self.conn.write(self.raddr, error.encode())
+      else:
+        let errorOpt = checkForError(decoded)
+        if errorOpt.isSome():
+          let error = errorOpt.get()
+          await self.conn.write(self.raddr, error.encode())
 
-      let bindingResponse = self.getBindingResponse(decoded)
-      await self.conn.write(self.raddr, bindingResponse.encode(decoded.getAttribute(AttrUsername)))
+        let bindingResponse = self.getBindingResponse(decoded)
+        await self.conn.write(self.raddr,
+          bindingResponse.encode(decoded.getAttribute(AttrUsername)))
     except SerializationError as exc:
       warn "Failed to decode the Stun message", error=exc.msg, message
     except WebRtcError as exc:
@@ -130,22 +137,24 @@ proc init*(
     T: type StunConn,
     conn: UdpConn,
     raddr: TransportAddress,
-    isServer: bool,
+    iceControlling: bool,
     rng: ref HmacDrbgContext
   ): T =
   ## Initialize a Stun Connection
   ##
-  var self = T()
-  self.conn = conn
-  self.laddr = conn.laddr
-  self.raddr = raddr
-  self.rng = rng
-  self.iceTiebreaker = self.rng[].generate(uint64)
-  self.closed = false
-  self.closeEvent = newAsyncEvent()
-  self.dataRecv = newAsyncQueue[seq[byte]]()
-  self.stunMsgs = newAsyncQueue[seq[byte]]()
-  self.handlesFut = self.stunMessageHandler()
+  var self = T(
+    conn: conn,
+    laddr: conn.laddr,
+    raddr: raddr,
+    closed: false,
+    closeEvent: newAsyncEvent(),
+    dataRecv: newAsyncQueue[seq[byte]](),
+    stunMsgs: newAsyncQueue[seq[byte]](),
+    handlesFut: self.stunMessageHandler(),
+    iceControlling: iceControlling,
+    iceTiebreaker: rng[].generate(uint64),
+    rng: rng
+  )
   return self
 
 proc join*(self: StunConn) {.async: (raises: [CancelledError]).} =

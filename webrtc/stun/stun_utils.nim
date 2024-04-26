@@ -10,7 +10,7 @@
 import sequtils, typetraits, std/sha1
 import bearssl
 
-const charset = toSeq("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789".items)
+const charset = toSeq("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789/+".items)
 proc genUfrag*(rng: ref HmacDrbgContext, size: int): seq[byte] =
   # https://github.com/libp2p/specs/blob/master/webrtc/webrtc-direct.md?plain=1#L73-L77
   result = newSeq[byte](size)
