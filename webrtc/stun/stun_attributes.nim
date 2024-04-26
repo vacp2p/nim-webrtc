@@ -214,12 +214,15 @@ proc encode*(T: typedesc[MessageIntegrity], msg: seq[byte], key: seq[byte]): Raw
 
 type
   Priority* = object
-    priority: uint32
+    priority*: uint32
 
 proc encode*(T: typedesc[Priority], priority: uint32): RawStunAttribute =
   let value = Binary.encode(T(priority: priority))
   result = RawStunAttribute(attributeType: AttrPriority.uint16,
                             length: value.len().uint16, value: value)
+
+proc decode*(T: typedesc[Priority], rawAttr: RawStunAttribute): T =
+  return Binary.decode(rawAttr.value, T)
 
 # Use-Candidate
 # https://datatracker.ietf.org/doc/html/rfc8445#section-7.1.2

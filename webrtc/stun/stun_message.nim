@@ -63,11 +63,11 @@ type
     transactionId*: array[12, byte]
     attributes*: seq[RawStunAttribute]
 
-proc getAttribute*(self: StunMessage, typ: StunAttributeEnum): Option[seq[byte]] =
+proc getAttribute*(self: StunMessage, typ: StunAttributeEnum): Option[RawStunAttribute] =
   for attr in self.attributes:
     if attr.attributeType == typ.uint16:
-      return some(attr.value)
-  return none(seq[byte])
+      return some(attr)
+  return none(RawStunAttribute)
 
 proc addLength(msgEncoded: var seq[byte], toAddLength: uint16) =
   # Add length to an already encoded message. It is necessary because
@@ -87,7 +87,10 @@ proc decode*(T: typedesc[StunMessage], msg: seq[byte]): StunMessage =
            transactionId: smi.transactionId,
            attributes: RawStunAttribute.decode(smi.content))
 
-proc encode*(msg: StunMessage, userOpt: Option[seq[byte]] = none(seq[byte])): seq[byte] =
+proc encode*(
+    msg: StunMessage,
+    userOpt: Option[RawStunAttribute] = none(RawStunAttribute)
+  ): seq[byte] =
   const pad = @[0, 3, 2, 1]
   var smi = RawStunMessage(msgType: msg.msgType,
                            magicCookie: StunMagicCookie,
@@ -99,7 +102,7 @@ proc encode*(msg: StunMessage, userOpt: Option[seq[byte]] = none(seq[byte])): se
   result = Binary.encode(smi)
 
   if userOpt.isSome():
-    let username = string.fromBytes(userOpt.get())
+    let username = string.fromBytes(userOpt.get().value)
     let usersplit = username.split(":")
     if usersplit.len() == 2 and usersplit[0].startsWith("libp2p+webrtc+v1/"):
       result.addLength(24)

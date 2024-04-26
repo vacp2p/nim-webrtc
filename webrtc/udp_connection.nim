@@ -40,7 +40,6 @@ proc init*(T: type UdpConn, laddr: TransportAddress): T =
     # On receive Udp message callback, store the
     # message with the corresponding remote address
     try:
-      trace "UDP onReceive"
       let msg = udp.getMessage()
       self.dataRecv.addLastNoWait((msg, raddr))
     except CatchableError as exc:

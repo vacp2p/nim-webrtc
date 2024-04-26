@@ -18,9 +18,9 @@ logScope:
 # - Need to implement ICE-CONTROLL(ED|ING) for browser to browser (not critical)
 
 const
-  StunBindingRequest = 0x0001'u16
-  StunBindingResponse = 0x0101'u16
-  StunBindingErrorResponse = 0x0111'u16
+  StunBindingRequest* = 0x0001'u16
+  StunBindingResponse* = 0x0101'u16
+  StunBindingErrorResponse* = 0x0111'u16
 
 type
   StunConn* = ref object
@@ -64,9 +64,14 @@ proc getBindingRequest*(self: StunConn, username: string = ""): StunMessage =
   ##
   result = StunMessage(msgType: StunBindingRequest)
   self.rng[].generate(result.transactionId)
-  let ufrag = string.fromBytes(self.rng.genUfrag(32))
-  let username = "libp2p+webrtc+v1/" & ufrag
-  result.attributes.add(UsernameAttribute.encode(username & ":" & username))
+
+  if username.len() == 0:
+    let ufrag = string.fromBytes(self.rng.genUfrag(32))
+    let p2pUsername = "libp2p+webrtc+v1/" & ufrag
+    result.attributes.add(UsernameAttribute.encode(p2pUsername & ":" & p2pUsername))
+  else:
+    result.attributes.add(UsernameAttribute.encode(username))
+
   if self.iceControlling:
     result.attributes.add(IceControlling.encode(self.iceTiebreaker))
   else:
@@ -87,7 +92,7 @@ proc checkForError*(msg: StunMessage): Option[StunMessage] =
 
   # This check is related to the libp2p specification.
   # Might be interesting to add a customizable function check.
-  let username = string.fromBytes(msg.getAttribute(AttrUsername).get())
+  let username = string.fromBytes(msg.getAttribute(AttrUsername).get().value)
   let usersplit = username.split(":")
   if usersplit.len() != 2 and not usersplit[0].startsWith("libp2p+webrtc+v1/"):
     res.attributes.add(ErrorCode.encode(ECUnauthorized))
@@ -128,8 +133,10 @@ proc stunMessageHandler(self: StunConn) {.async: (raises: [CancelledError]).} =
           await self.conn.write(self.raddr, error.encode())
 
         let bindingResponse = self.getBindingResponse(decoded)
-        await self.conn.write(self.raddr,
-          bindingResponse.encode(decoded.getAttribute(AttrUsername)))
+        await self.conn.write(
+          self.raddr,
+          bindingResponse.encode(decoded.getAttribute(AttrUsername))
+        )
     except SerializationError as exc:
       warn "Failed to decode the Stun message", error=exc.msg, message
     except WebRtcError as exc:
