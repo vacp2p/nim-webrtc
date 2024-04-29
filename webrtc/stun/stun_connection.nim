@@ -131,6 +131,7 @@ proc stunMessageHandler(self: StunConn) {.async: (raises: [CancelledError]).} =
         if errorOpt.isSome():
           let error = errorOpt.get()
           await self.conn.write(self.raddr, error.encode())
+          continue
 
         let bindingResponse = self.getBindingResponse(decoded)
         await self.conn.write(
