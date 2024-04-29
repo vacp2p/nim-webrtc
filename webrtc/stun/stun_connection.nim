@@ -124,7 +124,9 @@ proc stunMessageHandler(self: StunConn) {.async: (raises: [CancelledError]).} =
         trace "Received a STUN error", decoded, remote = self.raddr
         continue
       elif decoded.msgType == StunBindingResponse:
-        # TODO: Handle it
+        # TODO: Process StunBindingResponse doesn't seem necessary for nim-webrtc-direct.
+        # Some browsers could be uncooperative. In that case, it should be implemented.
+        # It should be implemented for nim-webrtc.
         continue
       else:
         let errorOpt = checkForError(decoded)
