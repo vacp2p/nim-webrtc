@@ -38,13 +38,11 @@ proc connect*(
   ): Future[StunConn] {.async: (raises: []).} =
   ## Connect to a remote address, creating a Stun Connection
   ##
-  if self.connections.hasKey(raddr):
-    try:
-      return self.connections[raddr]
-    except KeyError as exc:
-      doAssert(false, "Should never happen")
-  var res = StunConn.init(self.conn, raddr, false, self.rng)
-  self.connections[raddr] = res
+  var res = self.connections.getOrDefault(raddr)
+  if res == StunConn():
+    # connections[raddr] is not initialized
+    res = StunConn.init(self.conn, raddr, false, self.rng)
+    self.connections[raddr] = res
   return res
 
 proc cleanupStunConn(self: Stun, conn: StunConn) {.async: (raises: []).} =
