@@ -26,22 +26,23 @@ suite "Stun message encoding/decoding":
     let
       udpConn = UdpConn.init(AnyAddress)
       conn = StunConn.init(udpConn, TransportAddress(AnyAddress), true, newRng())
-      msg = conn.getBindingRequest(username = "Test")
+      msg = conn.getBindingRequest(username = "DoNotCreateMessageIntegrity")
       encoded = msg.encode(msg.getAttribute(AttrUsername))
       decoded = StunMessage.decode(encoded)
 
     check:
-      msg.msgType == decoded.msgType
+      msg.msgType == decoded.msgType and msg.msgType == StunBindingRequest
       msg.transactionId == decoded.transactionId
       msg.getAttribute(AttrUsername) == decoded.getAttribute(AttrUsername)
-      msg.getAttribute(AttrICEControlling).isSome()
-      msg.getAttribute(AttrICEControlled).isNone()
+      decoded.getAttribute(AttrICEControlling).isSome()
+      decoded.getAttribute(AttrICEControlled).isNone()
+      # Priority for a public server.
       Priority.decode(msg.getAttribute(AttrPriority).get()).priority == 0x7effffff
-      # encoding adds Fingerprint as attributes
+      decoded.getAttribute(AttrFingerprint).isSome()
       msg.attributes.len() == decoded.attributes.len() - 1
     conn.close()
 
-  test "Get BindingRequest + encode & decode with a random username":
+  test "Get BindingRequest + encode & decode with a libp2p valid random username":
     let
       udpConn = UdpConn.init(AnyAddress)
       conn = StunConn.init(udpConn, TransportAddress(AnyAddress), false, newRng())
@@ -53,10 +54,12 @@ suite "Stun message encoding/decoding":
       msg.msgType == decoded.msgType and msg.msgType == StunBindingRequest
       msg.transactionId == decoded.transactionId
       msg.getAttribute(AttrUsername) == decoded.getAttribute(AttrUsername)
-      msg.getAttribute(AttrICEControlling).isNone()
-      msg.getAttribute(AttrICEControlled).isSome()
+      decoded.getAttribute(AttrICEControlling).isNone()
+      decoded.getAttribute(AttrICEControlled).isSome()
       Priority.decode(msg.getAttribute(AttrPriority).get()).priority == 0x7effffff
-      # encoding adds Fingerprint as attributes
+      # encoding adds Fingerprint and Message-Integrity as attributes
+      decoded.getAttribute(AttrMessageIntegrity).isSome()
+      decoded.getAttribute(AttrFingerprint).isSome()
       msg.attributes.len() == decoded.attributes.len() - 2
     conn.close()
 
