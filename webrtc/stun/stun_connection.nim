@@ -111,6 +111,24 @@ proc checkForError*(msg: StunMessage): Option[StunMessage] =
 
   return none(StunMessage)
 
+proc isFingerprintValid*(msg: StunMessage): bool =
+  # Returns true if Fingerprint is missing or if it's valid.
+  # Returns false otherwise.
+  let fingerprint = msg.getAttribute(AttrFingerprint)
+  if fingerprint.isNone():
+    return true
+  if msg.attributes[^1] != fingerprint.get():
+    # Fingerprint should always be the last attribute.
+    return false
+  let
+    copyWithoutFingerprint = StunMessage(
+      msgType: msg.msgType,
+      transactionId: msg.transactionId,
+      attributes: msg.attributes[0 ..< ^1]
+    )
+    encodedCopy = copyWithoutFingerprint.encode(none(RawStunAttribute))
+  return fingerprint == StunMessage.decode(encodedCopy).getAttribute(AttrFingerprint)
+
 # - Stun Messages Handler -
 
 proc stunMessageHandler(self: StunConn) {.async: (raises: [CancelledError]).} =
@@ -120,6 +138,11 @@ proc stunMessageHandler(self: StunConn) {.async: (raises: [CancelledError]).} =
     let message = await self.stunMsgs.popFirst()
     try:
       let decoded = StunMessage.decode(await self.stunMsgs.popFirst())
+      if not decoded.isFingerprintValid():
+        # Fingerprint is invalid, the StunMessage received might be a false positive.
+        # Move this message to the `dataRecv` queue
+        await self.dataRecv.addLast(message)
+        continue
       if decoded.msgType == StunBindingErrorResponse:
         trace "Received a STUN error", decoded, remote = self.raddr
         continue
