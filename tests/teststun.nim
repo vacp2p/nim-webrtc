@@ -25,7 +25,12 @@ suite "Stun message encoding/decoding":
   test "Get BindingRequest + encode & decode with a set username":
     let
       udpConn = UdpConn.init(AnyAddress)
-      conn = StunConn.init(udpConn, TransportAddress(AnyAddress), true, newRng())
+      conn = StunConn.init(
+        udpConn,
+        TransportAddress(AnyAddress),
+        iceControlling=true,
+        newRng()
+      )
       msg = conn.getBindingRequest(username = "DoNotCreateMessageIntegrity")
       encoded = msg.encode(msg.getAttribute(AttrUsername))
       decoded = StunMessage.decode(encoded)
@@ -45,7 +50,12 @@ suite "Stun message encoding/decoding":
   test "Get BindingRequest + encode & decode with a libp2p valid random username":
     let
       udpConn = UdpConn.init(AnyAddress)
-      conn = StunConn.init(udpConn, TransportAddress(AnyAddress), false, newRng())
+      conn = StunConn.init(
+        udpConn,
+        TransportAddress(AnyAddress),
+        iceControlling=false,
+        newRng()
+      )
       msg = conn.getBindingRequest()
       encoded = msg.encode(msg.getAttribute(AttrUsername))
       decoded = StunMessage.decode(encoded)
@@ -66,7 +76,12 @@ suite "Stun message encoding/decoding":
   test "Get BindingResponse from BindingRequest + encode & decode":
     let
       udpConn = UdpConn.init(AnyAddress)
-      conn = StunConn.init(udpConn, TransportAddress(AnyAddress), false, newRng())
+      conn = StunConn.init(
+        udpConn,
+        TransportAddress(AnyAddress),
+        iceControlling=false,
+        newRng()
+      )
       bindingRequest = conn.getBindingRequest()
       bindingResponse = conn.getBindingResponse(bindingRequest)
       encoded = bindingResponse.encode(bindingRequest.getAttribute(AttrUsername))
