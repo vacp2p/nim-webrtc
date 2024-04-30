@@ -38,12 +38,12 @@ proc connect*(
   ): Future[StunConn] {.async: (raises: []).} =
   ## Connect to a remote address, creating a Stun Connection
   ##
-  var res = self.connections.getOrDefault(raddr)
-  if res == StunConn():
-    # connections[raddr] is not initialized
-    res = StunConn.init(self.conn, raddr, false, self.rng)
+  self.connections.withValue(raddr, res):
+    return res
+  do:
+    let res = StunConn.init(self.conn, raddr, false, self.rng)
     self.connections[raddr] = res
-  return res
+    return res
 
 proc cleanupStunConn(self: Stun, conn: StunConn) {.async: (raises: []).} =
   # Waiting for a connection to be closed to remove it from the table
