@@ -153,6 +153,10 @@ proc init*(
     rng: ref HmacDrbgContext
   ): T =
   ## Initialize a Stun Connection
+  ## `conn` the underlying Udp Connection
+  ## `raddr` the remote address observed while receiving message with Udp
+  ## `iceControlling` flag to know if we're supposed to act as a "client"
+  ##   (controlling) or a "server" (controlled)
   ##
   var self = T(
     conn: conn,
