@@ -21,80 +21,113 @@ import ./asyncunit
 proc newRng(): ref HmacDrbgContext =
   HmacDrbgContext.new()
 
+proc usernameProvEmpty(): string = ""
+proc usernameProvTest(): string {.raises: [], gcsafe.} = "TestUsername"
+proc usernameCheckTrue(username: seq[byte]): bool {.raises: [], gcsafe.} = true
+proc usernameCheckFalse(username: seq[byte]): bool {.raises: [], gcsafe.} = false
+proc passwordProvEmpty(username: seq[byte]): seq[byte] {.raises: [], gcsafe.} = @[]
+proc passwordProvTest(username: seq[byte]): seq[byte] {.raises: [], gcsafe.} = @[1'u8, 2, 3, 4]
+
 suite "Stun message encoding/decoding":
   test "Get BindingRequest + encode & decode with a set username":
-    let
+    var
       udpConn = UdpConn.init(AnyAddress)
       conn = StunConn.init(
         udpConn,
         TransportAddress(AnyAddress),
         iceControlling=true,
-        newRng()
-      )
-      msg = conn.getBindingRequest(username = "DoNotCreateMessageIntegrity")
-      encoded = msg.encode(msg.getAttribute(AttrUsername))
-      decoded = StunMessage.decode(encoded)
-
-    check:
-      msg.msgType == decoded.msgType and msg.msgType == StunBindingRequest
-      msg.transactionId == decoded.transactionId
-      msg.getAttribute(AttrUsername) == decoded.getAttribute(AttrUsername)
-      decoded.getAttribute(AttrICEControlling).isSome()
-      decoded.getAttribute(AttrICEControlled).isNone()
-      # Priority for a public server.
-      Priority.decode(msg.getAttribute(AttrPriority).get()).priority == 0x7effffff
-      decoded.getAttribute(AttrFingerprint).isSome()
-      msg.attributes.len() == decoded.attributes.len() - 1
-    conn.close()
-
-  test "Get BindingRequest + encode & decode with a libp2p valid random username":
-    let
-      udpConn = UdpConn.init(AnyAddress)
-      conn = StunConn.init(
-        udpConn,
-        TransportAddress(AnyAddress),
-        iceControlling=false,
+        usernameProvider=usernameProvTest,
+        usernameChecker=usernameCheckTrue,
+        passwordProvider=passwordProvEmpty,
         newRng()
       )
       msg = conn.getBindingRequest()
-      encoded = msg.encode(msg.getAttribute(AttrUsername))
+      encoded = msg.encode(@[1'u8, 2, 3, 4])
       decoded = StunMessage.decode(encoded)
+      messageIntegrity = decoded.attributes[^2]
+      fingerprint = decoded.attributes[^1]
 
+    decoded.attributes = decoded.attributes[0 ..< ^2]
     check:
-      msg.msgType == decoded.msgType and msg.msgType == StunBindingRequest
-      msg.transactionId == decoded.transactionId
-      msg.getAttribute(AttrUsername) == decoded.getAttribute(AttrUsername)
-      decoded.getAttribute(AttrICEControlling).isNone()
-      decoded.getAttribute(AttrICEControlled).isSome()
-      Priority.decode(msg.getAttribute(AttrPriority).get()).priority == 0x7effffff
-      # encoding adds Fingerprint and Message-Integrity as attributes
-      decoded.getAttribute(AttrMessageIntegrity).isSome()
-      decoded.getAttribute(AttrFingerprint).isSome()
-      msg.attributes.len() == decoded.attributes.len() - 2
+      decoded == msg
+      messageIntegrity.attributeType == AttrMessageIntegrity.uint16
+      fingerprint.attributeType == AttrFingerprint.uint16
     conn.close()
 
   test "Get BindingResponse from BindingRequest + encode & decode":
-    let
+    var
       udpConn = UdpConn.init(AnyAddress)
       conn = StunConn.init(
         udpConn,
         TransportAddress(AnyAddress),
         iceControlling=false,
+        usernameProvider=usernameProvTest,
+        usernameChecker=usernameCheckTrue,
+        passwordProvider=passwordProvEmpty,
         newRng()
       )
       bindingRequest = conn.getBindingRequest()
       bindingResponse = conn.getBindingResponse(bindingRequest)
-      encoded = bindingResponse.encode(bindingRequest.getAttribute(AttrUsername))
+      encoded = bindingResponse.encode(@[1'u8, 2, 3, 4])
       decoded = StunMessage.decode(encoded)
+      messageIntegrity = decoded.attributes[^2]
+      fingerprint = decoded.attributes[^1]
+
+    decoded.attributes = decoded.attributes[0 ..< ^2]
+    check:
+      bindingResponse == decoded
+      messageIntegrity.attributeType == AttrMessageIntegrity.uint16
+      fingerprint.attributeType == AttrFingerprint.uint16
+
+suite "Stun checkForError":
+  test "checkForError: Missing MessageIntegrity or Username":
+    var
+      udpConn = UdpConn.init(AnyAddress)
+      conn = StunConn.init(
+        udpConn,
+        TransportAddress(AnyAddress),
+        iceControlling=false,
+        usernameProvider=usernameProvEmpty, # Use of an empty username provider
+        usernameChecker=usernameCheckTrue,
+        passwordProvider=passwordProvEmpty,
+        newRng()
+      )
+      bindingRequest = conn.getBindingRequest()
+      errorMissMessageIntegrity = conn.checkForError(bindingRequest).get()
 
     check:
-      bindingResponse.msgType == StunBindingResponse
-      decoded.msgType == StunBindingResponse
-      decoded.transactionId == bindingRequest.transactionId
-      decoded.getAttribute(AttrXORMappedAddress).isSome()
-      decoded.getAttribute(AttrMessageIntegrity).isSome()
-      decoded.getAttribute(AttrFingerprint).isSome()
-      decoded.attributes.len() == 3
+      errorMissMessageIntegrity.getAttribute(ErrorCode).isSome()
+      errorMissMessageIntegrity.getAttribute(ErrorCode).get().getErrorCode() == ECBadRequest
+
+    let
+      encoded = bindingRequest.encode(@[1'u8, 2, 3, 4]) # adds MessageIntegrity
+      decoded = StunMessage.decode(encoded)
+      errorMissUsername = conn.checkForError(decoded).get()
+
+    check:
+      errorMissUsername.getAttribute(ErrorCode).isSome()
+      errorMissUsername.getAttribute(ErrorCode).get().getErrorCode() == ECBadRequest
+
+  test "checkForError: UsernameChecker returns false":
+    var
+      udpConn = UdpConn.init(AnyAddress)
+      conn = StunConn.init(
+        udpConn,
+        TransportAddress(AnyAddress),
+        iceControlling=false,
+        usernameProvider=usernameProvTest,
+        usernameChecker=usernameCheckFalse, # Username provider returns false
+        passwordProvider=passwordProvEmpty,
+        newRng()
+      )
+      bindingRequest = conn.getBindingRequest()
+      encoded = bindingRequest.encode(@[0'u8, 1, 2, 3])
+      decoded = StunMessage.decode(encoded)
+      error = conn.checkForError(decoded).get()
+
+    check:
+      error.getAttribute(ErrorCode).isSome()
+      error.getAttribute(ErrorCode).get().getErrorCode() == ECUnauthorized
 
 suite "Stun utilities":
   test "genUfrag":

@@ -20,6 +20,11 @@ type
     pendingConn: AsyncQueue[StunConn]
     readingLoop: Future[void]
     conn: UdpConn
+
+    usernameProvider: StunUsernameProvider
+    usernameChecker: StunUsernameChecker
+    passwordProvider: StunPasswordProvider
+
     rng: ref HmacDrbgContext
 
 proc accept*(self: Stun): Future[StunConn] {.async: (raises: [CancelledError]).} =
@@ -39,9 +44,10 @@ proc connect*(
   ## Connect to a remote address, creating a Stun Connection
   ##
   self.connections.withValue(raddr, res):
-    return res
+    return res[]
   do:
-    let res = StunConn.init(self.conn, raddr, false, self.rng)
+    let res = StunConn.init(self.conn, raddr, false, self.usernameProvider,
+      self.usernameChecker, self.passwordProvider, self.rng)
     self.connections[raddr] = res
     return res
 
@@ -58,7 +64,8 @@ proc stunReadLoop(self: Stun) {.async: (raises: [CancelledError]).} =
     let (buf, raddr) = await self.conn.read()
     var stunConn: StunConn
     if not self.connections.hasKey(raddr):
-      stunConn = StunConn.init(self.conn, raddr, true, self.rng)
+      stunConn = StunConn.init(self.conn, raddr, true, self.usernameProvider,
+        self.usernameChecker, self.passwordProvider, self.rng)
       self.connections[raddr] = stunConn
       await self.pendingConn.addLast(stunConn)
       asyncSpawn self.cleanupStunConn(stunConn)
@@ -80,14 +87,27 @@ proc stop(self: Stun) =
     conn.close()
   self.readingLoop.cancelSoon()
 
+proc defaultUsernameProvider(): string = ""
+proc defaultUsernameChecker(username: seq[byte]): bool = true
+proc defaultPasswordProvider(username: seq[byte]): seq[byte] = @[]
+
 proc init*(
     T: type Stun,
     conn: UdpConn,
-    rng: ref HmacDrbgContext = HmacDrbgContext.new()
+    usernameProvider: StunUsernameProvider = defaultUsernameProvider,
+    usernameChecker: StunUsernameChecker = defaultUsernameChecker,
+    passwordProvider: StunPasswordProvider = defaultPasswordProvider,
+    rng: ref HmacDrbgContext = HmacDrbgContext.new(),
   ): T =
   ## Initialize the Stun transport
   ##
-  var self = T(conn: conn, rng: rng)
+  var self = T(
+    conn: conn,
+    usernameProvider: usernameProvider,
+    usernameChecker: usernameChecker,
+    passwordProvider: passwordProvider,
+    rng: rng
+  )
   self.readingLoop = stunReadLoop()
   self.pendingConn = newAsyncQueue[StunConn]()
   return self

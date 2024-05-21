@@ -7,12 +7,11 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import strutils, bitops
+import bitops
 import chronos,
        bearssl,
        chronicles,
-       binary_serialization,
-       stew/byteutils
+       binary_serialization
 import stun_attributes, ../errors
 
 export binary_serialization
@@ -63,11 +62,12 @@ type
     transactionId*: array[12, byte]
     attributes*: seq[RawStunAttribute]
 
-proc getAttribute*(self: StunMessage, typ: StunAttributeEnum): Option[RawStunAttribute] =
+proc getAttribute*[T](self: StunMessage, typ: typedesc[T]): Option[T] =
+  let attributeTyp = attributeType(typ)
   for attr in self.attributes:
-    if attr.attributeType == typ.uint16:
-      return some(attr)
-  return none(RawStunAttribute)
+    if attr.attributeType == attributeTyp.uint16:
+      return some(T.decode(attr))
+  return none(T)
 
 proc addLength(msgEncoded: var seq[byte], toAddLength: uint16) =
   # Add length to an already encoded message. It is necessary because
@@ -89,7 +89,7 @@ proc decode*(T: typedesc[StunMessage], msg: seq[byte]): StunMessage =
 
 proc encode*(
     msg: StunMessage,
-    userOpt: Option[RawStunAttribute] = none(RawStunAttribute)
+    messageIntegrityPassword: seq[byte]
   ): seq[byte] =
   const pad = @[0, 3, 2, 1]
   var smi = RawStunMessage(msgType: msg.msgType,
@@ -101,12 +101,9 @@ proc encode*(
 
   result = Binary.encode(smi)
 
-  if userOpt.isSome():
-    let username = string.fromBytes(userOpt.get().value)
-    let usersplit = username.split(":")
-    if usersplit.len() == 2 and usersplit[0].startsWith("libp2p+webrtc+v1/"):
-      result.addLength(24)
-      result.add(Binary.encode(MessageIntegrity.encode(result, toBytes(usersplit[0]))))
+  if messageIntegrityPassword != @[]:
+    result.addLength(24)
+    result.add(Binary.encode(MessageIntegrity.encode(result, messageIntegrityPassword)))
 
   result.addLength(8)
   result.add(Binary.encode(Fingerprint.encode(result)))

@@ -9,7 +9,7 @@
 
 import strutils
 import bearssl, chronos, chronicles, stew/[objects, byteutils]
-import ../[udp_connection, errors], stun_message, stun_attributes, stun_utils
+import ../[udp_connection, errors], stun_message, stun_attributes
 
 logScope:
   topics = "webrtc stun stun_connection"
@@ -23,6 +23,10 @@ const
   StunBindingErrorResponse* = 0x0111'u16
 
 type
+  StunUsernameProvider* = proc(): string {.raises: [], gcsafe.}
+  StunUsernameChecker* = proc(username: seq[byte]): bool {.raises: [], gcsafe.}
+  StunPasswordProvider* = proc(username: seq[byte]): seq[byte] {.raises: [], gcsafe.}
+
   StunConn* = ref object
     conn*: UdpConn # Underlying UDP connexion
     laddr*: TransportAddress # Local address
@@ -37,6 +41,11 @@ type
     # Is ice-controlling and iceTiebreaker, not fully implemented yet.
     iceControlling: bool
     iceTiebreaker: uint32
+
+    # Specified by the user
+    usernameProvider: StunUsernameProvider
+    usernameChecker: StunUsernameChecker
+    passwordProvider: StunPasswordProvider
 
     rng: ref HmacDrbgContext
 
@@ -59,17 +68,14 @@ proc calculatePriority(self: StunConn): uint32 =
   let componentID = 1'u32
   return (1 shl 24) * typePreference + (1 shl 8) * localPreference + (256 - componentID)
 
-proc getBindingRequest*(self: StunConn, username: string = ""): StunMessage =
+proc getBindingRequest*(self: StunConn): StunMessage =
   ## Creates an encoded Binding Request
   ##
   result = StunMessage(msgType: StunBindingRequest)
   self.rng[].generate(result.transactionId)
 
-  if username.len() == 0:
-    let ufrag = string.fromBytes(self.rng.genUfrag(32))
-    let p2pUsername = "libp2p+webrtc+v1/" & ufrag
-    result.attributes.add(UsernameAttribute.encode(p2pUsername & ":" & p2pUsername))
-  else:
+  let username = self.usernameProvider()
+  if username != "":
     result.attributes.add(UsernameAttribute.encode(username))
 
   if self.iceControlling:
@@ -78,23 +84,20 @@ proc getBindingRequest*(self: StunConn, username: string = ""): StunMessage =
     result.attributes.add(IceControlled.encode(self.iceTiebreaker))
   result.attributes.add(Priority.encode(self.calculatePriority()))
 
-proc checkForError*(msg: StunMessage): Option[StunMessage] =
+proc checkForError*(self: StunConn, msg: StunMessage): Option[StunMessage] =
   # Check for error from a BindingRequest message.
   # Returns an option with some BindingErrorResponse if there is an error.
   # Returns none otherwise.
   # https://datatracker.ietf.org/doc/html/rfc5389#section-10.1.2
   var res = StunMessage(msgType: StunBindingErrorResponse,
                         transactionId: msg.transactionId)
-  if msg.getAttribute(AttrMessageIntegrity).isNone() or
-     msg.getAttribute(AttrUsername).isNone():
+  if msg.getAttribute(MessageIntegrity).isNone() or
+     msg.getAttribute(UsernameAttribute).isNone():
     res.attributes.add(ErrorCode.encode(ECBadRequest))
     return some(res)
 
-  # This check is related to the libp2p specification.
-  # Might be interesting to add a customizable function check.
-  let username = string.fromBytes(msg.getAttribute(AttrUsername).get().value)
-  let usersplit = username.split(":")
-  if usersplit.len() != 2 and not usersplit[0].startsWith("libp2p+webrtc+v1/"):
+  let usernameAttr = msg.getAttribute(UsernameAttribute).get()
+  if not self.usernameChecker(usernameAttr.username):
     res.attributes.add(ErrorCode.encode(ECUnauthorized))
     return some(res)
 
@@ -106,7 +109,7 @@ proc checkForError*(msg: StunMessage): Option[StunMessage] =
       unknownAttr.add(typ)
   if unknownAttr.len() > 0:
     res.attributes.add(ErrorCode.encode(ECUnknownAttribute))
-    res.attributes.add(UnknownAttribute.encode(unknownAttr))
+    res.attributes.add(UnknownAttributes.encode(unknownAttr))
     return some(res)
 
   return none(StunMessage)
@@ -114,10 +117,10 @@ proc checkForError*(msg: StunMessage): Option[StunMessage] =
 proc isFingerprintValid*(msg: StunMessage): bool =
   # Returns true if Fingerprint is missing or if it's valid.
   # Returns false otherwise.
-  let fingerprint = msg.getAttribute(AttrFingerprint)
+  let fingerprint = msg.getAttribute(Fingerprint)
   if fingerprint.isNone():
     return true
-  if msg.attributes[^1] != fingerprint.get():
+  if msg.attributes[^1].attributeType != AttrFingerprint:
     # Fingerprint should always be the last attribute.
     return false
   let
@@ -126,8 +129,8 @@ proc isFingerprintValid*(msg: StunMessage): bool =
       transactionId: msg.transactionId,
       attributes: msg.attributes[0 ..< ^1]
     )
-    encodedCopy = copyWithoutFingerprint.encode(none(RawStunAttribute))
-  return fingerprint == StunMessage.decode(encodedCopy).getAttribute(AttrFingerprint)
+    encodedCopy = copyWithoutFingerprint.encode(@[])
+  return fingerprint == StunMessage.decode(encodedCopy).getAttribute(Fingerprint)
 
 # - Stun Messages Handler -
 
@@ -151,17 +154,20 @@ proc stunMessageHandler(self: StunConn) {.async: (raises: [CancelledError]).} =
         # Some browsers could be uncooperative. In that case, it should be implemented.
         # It should be implemented for libp2p-webrtc.
         continue
-      else:
-        let errorOpt = checkForError(decoded)
+      elif decoded.msgType == StunBindingRequest:
+        let errorOpt = self.checkForError(decoded)
         if errorOpt.isSome():
           let error = errorOpt.get()
-          await self.conn.write(self.raddr, error.encode())
+          await self.conn.write(self.raddr, error.encode(@[]))
           continue
 
-        let bindingResponse = self.getBindingResponse(decoded)
+        let
+          bindingResponse = self.getBindingResponse(decoded)
+          usernameAttr = decoded.getAttribute(UsernameAttribute).get()
+          password = self.passwordProvider(usernameAttr.username)
         await self.conn.write(
           self.raddr,
-          bindingResponse.encode(decoded.getAttribute(AttrUsername))
+          bindingResponse.encode(password)
         )
     except SerializationError as exc:
       warn "Failed to decode the Stun message", error=exc.msg, message
@@ -173,6 +179,9 @@ proc init*(
     conn: UdpConn,
     raddr: TransportAddress,
     iceControlling: bool,
+    usernameProvider: StunUsernameProvider,
+    usernameChecker: StunUsernameChecker,
+    passwordProvider: StunPasswordProvider,
     rng: ref HmacDrbgContext
   ): T =
   ## Initialize a Stun Connection
@@ -180,6 +189,11 @@ proc init*(
   ## `raddr` the remote address observed while receiving message with Udp
   ## `iceControlling` flag to know if we're supposed to act as a "client"
   ##   (controlling) or a "server" (controlled)
+  ## `usernameProvider` callback to get a username for the Username attribute
+  ## `usernameChecker` callback to let the user check if the Username received
+  ##   is valid or not
+  ## `passwordProvider` callback to get a key password for the
+  ##   Message-integrity sha1 encryption
   ##
   var self = T(
     conn: conn,
@@ -191,6 +205,9 @@ proc init*(
     stunMsgs: newAsyncQueue[seq[byte]](),
     iceControlling: iceControlling,
     iceTiebreaker: rng[].generate(uint32),
+    usernameProvider: usernameProvider,
+    usernameChecker: usernameChecker,
+    passwordProvider: passwordProvider,
     rng: rng
   )
   self.handlesFut = self.stunMessageHandler()

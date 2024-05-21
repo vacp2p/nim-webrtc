@@ -87,22 +87,31 @@ type
 
 proc isRequired*(typ: uint16): bool = typ <= 0x7FFF'u16
 proc isOptional*(typ: uint16): bool = typ >= 0x8000'u16
+proc `==`*(x: uint16, y: StunAttributeEnum): bool = x == y.uint16
+proc `==`*(y: StunAttributeEnum, x: uint16): bool = x == y
 
 # Username
 # https://datatracker.ietf.org/doc/html/rfc5389#section-15.3
 
 type
   UsernameAttribute* = object
+    username*: seq[byte]
+
+proc attributeType*(T: typedesc[UsernameAttribute]): StunAttributeEnum = AttrUsername
 
 proc encode*(T: typedesc[UsernameAttribute], username: seq[byte]): RawStunAttribute =
+  let
+    userAttr = UsernameAttribute(username: username)
+    value = Binary.encode(userAttr)
   result = RawStunAttribute(attributeType: AttrUsername.uint16,
                             length: username.len().uint16,
-                            value: username)
+                            value: value)
 
 proc encode*(T: typedesc[UsernameAttribute], username: string): RawStunAttribute =
-  result = RawStunAttribute(attributeType: AttrUsername.uint16,
-                            length: username.len().uint16,
-                            value: username.toBytes())
+  return UsernameAttribute.encode(username.toBytes())
+
+proc decode*(T: typedesc[UsernameAttribute], rawAttr: RawStunAttribute): T =
+  return Binary.decode(rawAttr.value, T)
 
 # Error Code
 # https://datatracker.ietf.org/doc/html/rfc5389#section-15.6
@@ -122,30 +131,43 @@ type
     number: uint8
     reason: seq[byte]
 
+proc attributeType*(T: typedesc[ErrorCode]): StunAttributeEnum = AttrErrorCode
+
+proc getErrorCode*(self: ErrorCode): ErrorCodeEnum =
+  ErrorCodeEnum(self.class.uint16 * 100 + self.number.uint16)
+
 proc encode*(T: typedesc[ErrorCode], code: ErrorCodeEnum, reason: string = ""): RawStunAttribute =
   let
     ec = T(class: (code.uint16 div 100'u16).uint8,
-                   number: (code.uint16 mod 100'u16).uint8,
-                   reason: reason.toBytes())
+           number: (code.uint16 mod 100'u16).uint8,
+           reason: @[]) # Reason should be encoded in utf-8, binary-serialization cannot do it
     value = Binary.encode(ec)
   result = RawStunAttribute(attributeType: AttrErrorCode.uint16,
                             length: value.len().uint16,
                             value: value)
 
-# Unknown Attribute
+proc decode*(T: typedesc[ErrorCode], rawAttr: RawStunAttribute): T =
+  return Binary.decode(rawAttr.value, T)
+
+# Unknown Attributes
 # https://datatracker.ietf.org/doc/html/rfc5389#section-15.9
 
 type
-  UnknownAttribute* = object
+  UnknownAttributes* = object
     unknownAttr: seq[uint16]
 
-proc encode*(T: typedesc[UnknownAttribute], unknownAttr: seq[uint16]): RawStunAttribute =
+proc attributeType*(T: typedesc[UnknownAttributes]): StunAttributeEnum = AttrUnknownAttributes
+
+proc encode*(T: typedesc[UnknownAttributes], unknownAttr: seq[uint16]): RawStunAttribute =
   let
     ua = T(unknownAttr: unknownAttr)
     value = Binary.encode(ua)
   result = RawStunAttribute(attributeType: AttrUnknownAttributes.uint16,
                             length: value.len().uint16,
                             value: value)
+
+proc decode*(T: typedesc[UnknownAttributes], rawAttr: RawStunAttribute): T =
+  return Binary.decode(rawAttr.value, T)
 
 # Fingerprint
 # https://datatracker.ietf.org/doc/html/rfc5389#section-15.5
@@ -154,11 +176,16 @@ type
   Fingerprint* = object
     crc32: uint32
 
+proc attributeType*(T: typedesc[Fingerprint]): StunAttributeEnum = AttrFingerprint
+
 proc encode*(T: typedesc[Fingerprint], msg: seq[byte]): RawStunAttribute =
   let value = Binary.encode(T(crc32: crc32(msg) xor 0x5354554e'u32))
   result = RawStunAttribute(attributeType: AttrFingerprint.uint16,
                             length: value.len().uint16,
                             value: value)
+
+proc decode*(T: typedesc[Fingerprint], rawAttr: RawStunAttribute): T =
+  return Binary.decode(rawAttr.value, T)
 
 # Xor Mapped Address
 # https://datatracker.ietf.org/doc/html/rfc5389#section-15.2
@@ -173,6 +200,8 @@ type
     family: MappedAddressFamily
     port: uint16
     address: seq[byte]
+
+proc attributeType*(T: typedesc[XorMappedAddress]): StunAttributeEnum = AttrXORMappedAddress
 
 proc encode*(T: typedesc[XorMappedAddress], ta: TransportAddress,
              tid: array[12, byte]): RawStunAttribute =
@@ -196,6 +225,9 @@ proc encode*(T: typedesc[XorMappedAddress], ta: TransportAddress,
                             length: value.len().uint16,
                             value: value)
 
+proc decode*(T: typedesc[XorMappedAddress], rawAttr: RawStunAttribute): T =
+  return Binary.decode(rawAttr.value, T)
+
 # Message Integrity
 # https://datatracker.ietf.org/doc/html/rfc5389#section-15.4
 
@@ -203,10 +235,15 @@ type
   MessageIntegrity* = object
     msgInt: seq[byte]
 
+proc attributeType*(T: typedesc[MessageIntegrity]): StunAttributeEnum = AttrMessageIntegrity
+
 proc encode*(T: typedesc[MessageIntegrity], msg: seq[byte], key: seq[byte]): RawStunAttribute =
   let value = Binary.encode(T(msgInt: hmacSha1(key, msg)))
   result = RawStunAttribute(attributeType: AttrMessageIntegrity.uint16,
                             length: value.len().uint16, value: value)
+
+proc decode*(T: typedesc[MessageIntegrity], rawAttr: RawStunAttribute): T =
+  return Binary.decode(rawAttr.value, T)
 
 # Priority
 # https://datatracker.ietf.org/doc/html/rfc8445#section-7.1.1
@@ -215,6 +252,8 @@ proc encode*(T: typedesc[MessageIntegrity], msg: seq[byte], key: seq[byte]): Raw
 type
   Priority* = object
     priority*: uint32
+
+proc attributeType*(T: typedesc[Priority]): StunAttributeEnum = AttrPriority
 
 proc encode*(T: typedesc[Priority], priority: uint32): RawStunAttribute =
   let value = Binary.encode(T(priority: priority))
@@ -231,8 +270,13 @@ proc decode*(T: typedesc[Priority], rawAttr: RawStunAttribute): T =
 
 type UseCandidate* = object
 
+proc attributeType*(T: typedesc[UseCandidate]): StunAttributeEnum = AttrUseCandidate
+
 proc encode*(T: typedesc[UseCandidate]): RawStunAttribute =
   RawStunAttribute(attributeType: AttrUseCandidate.uint16, length: 0, value: @[])
+
+proc decode*(T: typedesc[UseCandidate], rawAttr: RawStunAttribute): T =
+  return Binary.decode(rawAttr.value, T)
 
 # Ice-Controlling / Ice-Controlled
 # https://datatracker.ietf.org/doc/html/rfc8445#section-7.1.3
@@ -245,6 +289,10 @@ type
   IceControlled* = object
     tieBreaker: uint32
 
+proc attributeType*(T: typedesc[IceControlling]): StunAttributeEnum = AttrICEControlling
+
+proc attributeType*(T: typedesc[IceControlled]): StunAttributeEnum = AttrICEControlled
+
 proc encode*(T: typedesc[IceControlling], tieBreaker: uint32): RawStunAttribute =
   let value = Binary.encode(T(tieBreaker: tieBreaker))
   result = RawStunAttribute(attributeType: AttrICEControlling.uint16,
@@ -254,3 +302,9 @@ proc encode*(T: typedesc[IceControlled], tieBreaker: uint32): RawStunAttribute =
   let value = Binary.encode(T(tieBreaker: tieBreaker))
   result = RawStunAttribute(attributeType: AttrICEControlled.uint16,
                             length: value.len().uint16, value: value)
+
+proc decode*(T: typedesc[IceControlling], rawAttr: RawStunAttribute): T =
+  return Binary.decode(rawAttr.value, T)
+
+proc decode*(T: typedesc[IceControlled], rawAttr: RawStunAttribute): T =
+  return Binary.decode(rawAttr.value, T)
