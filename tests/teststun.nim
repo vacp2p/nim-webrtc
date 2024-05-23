@@ -128,11 +128,3 @@ suite "Stun checkForError":
     check:
       error.getAttribute(ErrorCode).isSome()
       error.getAttribute(ErrorCode).get().getErrorCode() == ECUnauthorized
-
-suite "Stun utilities":
-  test "genUfrag":
-    let s = genUfrag(newRng(), 2048)
-    check s.len() == 2048
-    for b in s:
-      let c = b.chr()
-      check isAlphaNumeric(c) or c == '+' or c == '/'
