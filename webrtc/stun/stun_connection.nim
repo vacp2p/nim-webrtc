@@ -18,6 +18,7 @@ logScope:
 # - Need to implement ICE-CONTROLL(ED|ING) for browser to browser (not critical)
 
 const
+  StunMaxQueuingMessages = 1024
   StunBindingRequest* = 0x0001'u16
   StunBindingResponse* = 0x0101'u16
   StunBindingErrorResponse* = 0x0111'u16
@@ -200,8 +201,8 @@ proc new*(
     raddr: raddr,
     closed: false,
     closeEvent: newAsyncEvent(),
-    dataRecv: newAsyncQueue[seq[byte]](),
-    stunMsgs: newAsyncQueue[seq[byte]](),
+    dataRecv: newAsyncQueue[seq[byte]](StunMaxQueuingMessages),
+    stunMsgs: newAsyncQueue[seq[byte]](StunMaxQueuingMessages),
     iceControlling: iceControlling,
     iceTiebreaker: rng[].generate(uint32),
     usernameProvider: usernameProvider,

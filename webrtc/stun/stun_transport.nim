@@ -14,6 +14,9 @@ import stun_connection, stun_message, ../udp_connection
 logScope:
   topics = "webrtc stun stun_transport"
 
+const
+  StunMaxPendingConnections = 512
+
 type
   Stun* = ref object
     connections: Table[TransportAddress, StunConn]
@@ -109,5 +112,5 @@ proc new*(
     rng: rng
   )
   self.readingLoop = stunReadLoop()
-  self.pendingConn = newAsyncQueue[StunConn]()
+  self.pendingConn = newAsyncQueue[StunConn](StunMaxPendingConnections)
   return self
