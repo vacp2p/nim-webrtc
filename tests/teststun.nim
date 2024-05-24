@@ -32,7 +32,7 @@ suite "Stun message encoding/decoding":
   test "Get BindingRequest + encode & decode with a set username":
     var
       udpConn = UdpConn.init(AnyAddress)
-      conn = StunConn.init(
+      conn = StunConn.new(
         udpConn,
         TransportAddress(AnyAddress),
         iceControlling=true,
@@ -57,7 +57,7 @@ suite "Stun message encoding/decoding":
   test "Get BindingResponse from BindingRequest + encode & decode":
     var
       udpConn = UdpConn.init(AnyAddress)
-      conn = StunConn.init(
+      conn = StunConn.new(
         udpConn,
         TransportAddress(AnyAddress),
         iceControlling=false,
@@ -83,7 +83,7 @@ suite "Stun checkForError":
   test "checkForError: Missing MessageIntegrity or Username":
     var
       udpConn = UdpConn.init(AnyAddress)
-      conn = StunConn.init(
+      conn = StunConn.new(
         udpConn,
         TransportAddress(AnyAddress),
         iceControlling=false,
@@ -109,7 +109,7 @@ suite "Stun checkForError":
   test "checkForError: UsernameChecker returns false":
     var
       udpConn = UdpConn.init(AnyAddress)
-      conn = StunConn.init(
+      conn = StunConn.new(
         udpConn,
         TransportAddress(AnyAddress),
         iceControlling=false,

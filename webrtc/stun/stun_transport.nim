@@ -46,7 +46,7 @@ proc connect*(
   self.connections.withValue(raddr, res):
     return res[]
   do:
-    let res = StunConn.init(self.conn, raddr, false, self.usernameProvider,
+    let res = StunConn.new(self.conn, raddr, false, self.usernameProvider,
       self.usernameChecker, self.passwordProvider, self.rng)
     self.connections[raddr] = res
     return res
@@ -64,7 +64,7 @@ proc stunReadLoop(self: Stun) {.async: (raises: [CancelledError]).} =
     let (buf, raddr) = await self.conn.read()
     var stunConn: StunConn
     if not self.connections.hasKey(raddr):
-      stunConn = StunConn.init(self.conn, raddr, true, self.usernameProvider,
+      stunConn = StunConn.new(self.conn, raddr, true, self.usernameProvider,
         self.usernameChecker, self.passwordProvider, self.rng)
       self.connections[raddr] = stunConn
       await self.pendingConn.addLast(stunConn)
@@ -91,7 +91,7 @@ proc defaultUsernameProvider(): string = ""
 proc defaultUsernameChecker(username: seq[byte]): bool = true
 proc defaultPasswordProvider(username: seq[byte]): seq[byte] = @[]
 
-proc init*(
+proc new*(
     T: type Stun,
     conn: UdpConn,
     usernameProvider: StunUsernameProvider = defaultUsernameProvider,

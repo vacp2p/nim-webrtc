@@ -173,7 +173,7 @@ proc stunMessageHandler(self: StunConn) {.async: (raises: [CancelledError]).} =
     except WebRtcError as exc:
       trace "Failed to write the Stun response", error=exc.msg
 
-proc init*(
+proc new*(
     T: type StunConn,
     conn: UdpConn,
     raddr: TransportAddress,
