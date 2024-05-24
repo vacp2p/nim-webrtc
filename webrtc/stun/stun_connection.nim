@@ -170,7 +170,7 @@ proc stunMessageHandler(self: StunConn) {.async: (raises: [CancelledError]).} =
           bindingResponse.encode(password)
         )
     except SerializationError as exc:
-      warn "Failed to decode the Stun message", error=exc.msg, message
+      debug "Failed to decode the Stun message", error=exc.msg, message
     except WebRtcError as exc:
       trace "Failed to write the Stun response", error=exc.msg
 
