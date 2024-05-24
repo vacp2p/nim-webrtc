@@ -50,11 +50,10 @@ type
     rng: ref HmacDrbgContext
 
 # - Create Binding Messages (Request / Response / Error)
+# Those procedures should be private. They're public for testing purpose.
 
 proc getBindingResponse*(self: StunConn, msg: StunMessage): StunMessage =
-  ## Takes an encoded Stun Message and the local address. Returns
-  ## an encoded Binding Response if the received message is a
-  ## Binding request.
+  ## Creates a Binding Response StunMessage using a BindingRequest as input.
   ##
   result = StunMessage(msgType: StunBindingResponse,
                         transactionId: msg.transactionId)
@@ -69,7 +68,7 @@ proc calculatePriority(self: StunConn): uint32 =
   return (1 shl 24) * typePreference + (1 shl 8) * localPreference + (256 - componentID)
 
 proc getBindingRequest*(self: StunConn): StunMessage =
-  ## Creates an encoded Binding Request
+  ## Creates a Binding Request.
   ##
   result = StunMessage(msgType: StunBindingRequest)
   self.rng[].generate(result.transactionId)
