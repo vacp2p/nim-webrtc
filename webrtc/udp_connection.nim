@@ -18,8 +18,6 @@ logScope:
 # the remote address used by the underlying protocols (dtls/sctp etc...)
 
 type
-  WebRtcUdpError = object of WebRtcError
-
   UdpPacketInfo* = tuple
     message: seq[byte]
     raddr: TransportAddress
@@ -42,7 +40,6 @@ proc init*(T: type UdpConn, laddr: TransportAddress): T =
     # On receive Udp message callback, store the
     # message with the corresponding remote address
     try:
-      trace "UDP onReceive"
       let msg = udp.getMessage()
       self.dataRecv.addLastNoWait((msg, raddr))
     except CatchableError as exc:
@@ -65,7 +62,7 @@ proc write*(
     self: UdpConn,
     raddr: TransportAddress,
     msg: seq[byte]
-  ) {.async: (raises: [CancelledError, WebRtcUdpError]).} =
+  ) {.async: (raises: [CancelledError, WebRtcError]).} =
   ## Write a message on Udp to a remote address `raddr`
   ##
   if self.closed:
@@ -75,8 +72,8 @@ proc write*(
   try:
     await self.udp.sendTo(raddr, msg)
   except TransportError as exc:
-    raise newException(WebRtcUdpError,
-      "Error when sending data on a DatagramTransport: " & exc.msg , exc)
+    raise newException(WebRtcError,
+      "UDP - Error when sending data on a DatagramTransport: " & exc.msg , exc)
 
 proc read*(self: UdpConn): Future[UdpPacketInfo] {.async: (raises: [CancelledError]).} =
   ## Read the next received Udp message
