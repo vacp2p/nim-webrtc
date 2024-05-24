@@ -9,13 +9,12 @@
 
 {.used.}
 
-import options, strutils
+import options
 import bearssl
 import ../webrtc/udp_connection
 import ../webrtc/stun/stun_connection
 import ../webrtc/stun/stun_message
 import ../webrtc/stun/stun_attributes
-import ../webrtc/stun/stun_utils
 import ./asyncunit
 
 proc newRng(): ref HmacDrbgContext =

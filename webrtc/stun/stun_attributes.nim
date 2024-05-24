@@ -9,7 +9,7 @@
 
 import sequtils, system, typetraits
 import binary_serialization,
-       stew/byteutils,
+       stew/[byteutils, objects],
        chronos
 import stun_utils
 
@@ -118,6 +118,7 @@ proc decode*(T: typedesc[UsernameAttribute], rawAttr: RawStunAttribute): T =
 
 type
   ErrorCodeEnum* = enum
+    ECUnknownErrorCode = 0
     ECTryAlternate = 300
     ECBadRequest = 400
     ECUnauthorized = 401
@@ -134,7 +135,10 @@ type
 proc attributeType*(T: typedesc[ErrorCode]): StunAttributeEnum = AttrErrorCode
 
 proc getErrorCode*(self: ErrorCode): ErrorCodeEnum =
-  ErrorCodeEnum(self.class.uint16 * 100 + self.number.uint16)
+  var res: ErrorCodeEnum
+  if not res.checkedEnumAssign(self.class.uint16 * 100 + self.number.uint16):
+    return ECUnknownErrorCode
+  return res
 
 proc encode*(T: typedesc[ErrorCode], code: ErrorCodeEnum, reason: string = ""): RawStunAttribute =
   let
