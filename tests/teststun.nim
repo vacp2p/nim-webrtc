@@ -96,7 +96,6 @@ suite "Stun checkForError":
       errorMissMessageIntegrity = conn.checkForError(bindingRequest).get()
 
     check:
-      errorMissMessageIntegrity.getAttribute(ErrorCode).isSome()
       errorMissMessageIntegrity.getAttribute(ErrorCode).get().getErrorCode() == ECBadRequest
 
     let
@@ -105,7 +104,6 @@ suite "Stun checkForError":
       errorMissUsername = conn.checkForError(decoded).get()
 
     check:
-      errorMissUsername.getAttribute(ErrorCode).isSome()
       errorMissUsername.getAttribute(ErrorCode).get().getErrorCode() == ECBadRequest
 
   test "checkForError: UsernameChecker returns false":
@@ -126,5 +124,4 @@ suite "Stun checkForError":
       error = conn.checkForError(decoded).get()
 
     check:
-      error.getAttribute(ErrorCode).isSome()
       error.getAttribute(ErrorCode).get().getErrorCode() == ECUnauthorized
