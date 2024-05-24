@@ -223,9 +223,9 @@ proc close*(self: StunConn) =
   if self.closed:
     debug "Try to close an already closed StunConn"
     return
-  self.closed = true
   self.closeEvent.fire()
   self.handlesFut.cancelSoon()
+  self.closed = true
 
 proc write*(
     self: StunConn,
