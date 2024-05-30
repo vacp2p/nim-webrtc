@@ -9,7 +9,8 @@
 
 import times, deques, tables, sequtils
 import chronos, chronicles
-import ./utils, ../stun/stun_connection, ../errors
+import ./utils, ../errors,
+       ../stun/[stun_connection, stun_transport]
 
 import mbedtls/ssl
 import mbedtls/ssl_cookie
@@ -69,7 +70,7 @@ type
     localCert: seq[byte]
     remoteCert: seq[byte]
 
-proc init(T: type DtlsConn, conn: StunConn, laddr: TransportAddress): T =
+proc new(T: type DtlsConn, conn: StunConn, laddr: TransportAddress): T =
   ## Initialize a Dtls Connection
   ##
   var self = T(conn: conn, laddr: laddr)
@@ -191,7 +192,7 @@ proc updateOrAdd(aq: AsyncQueue[(TransportAddress, seq[byte])],
       return
   aq.addLastNoWait((raddr, buf))
 
-proc init*(T: type Dtls, transport: Stun, laddr: TransportAddress): T =
+proc new*(T: type Dtls, transport: Stun, laddr: TransportAddress): T =
   var self = T()
 
   self.connections = initTable[TransportAddress, DtlsConn]()
@@ -279,7 +280,7 @@ proc cleanupDtlsConn(self: Dtls, conn: DtlsConn) {.async.} =
 proc accept*(self: Dtls): Future[DtlsConn] {.async.} =
   ## Accept a Dtls Connection
   ##
-  var res = DtlsConn.init(await self.transport.accept(), self.laddr)
+  var res = DtlsConn.new(await self.transport.accept(), self.laddr)
 
   mb_ssl_init(res.ssl)
   mb_ssl_config_init(res.config)
@@ -326,7 +327,7 @@ proc accept*(self: Dtls): Future[DtlsConn] {.async.} =
 
 proc connect*(self: Dtls, raddr: TransportAddress): Future[DtlsConn] {.async.} =
   ## Connect to a remote address, creating a Dtls Connection
-  var res = DtlsConn.init(await self.transport.connect(raddr), self.laddr)
+  var res = DtlsConn.new(await self.transport.connect(raddr), self.laddr)
 
   mb_ssl_init(res.ssl)
   mb_ssl_config_init(res.config)
