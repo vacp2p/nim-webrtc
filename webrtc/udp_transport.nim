@@ -13,23 +13,23 @@ import chronos, chronicles
 logScope:
   topics = "webrtc udp"
 
-# UdpConn is a small wrapper of the chronos DatagramTransport.
+# UdpTransport is a small wrapper of the chronos DatagramTransport.
 # It's the simplest solution we found to store the message and
-# the remote address used by the underlying protocols (dtls/sctp etc...)
+# the remote address used by the wrapped protocols (dtls/sctp...)
 
 type
   UdpPacketInfo* = tuple
     message: seq[byte]
     raddr: TransportAddress
 
-  UdpConn* = ref object
+  UdpTransport* = ref object
     laddr*: TransportAddress
     udp: DatagramTransport
     dataRecv: AsyncQueue[UdpPacketInfo]
     closed: bool
 
-proc init*(T: type UdpConn, laddr: TransportAddress): T =
-  ## Initialize an Udp Connection
+proc new*(T: type UdpTransport, laddr: TransportAddress): T =
+  ## Initialize an Udp Transport
   ##
   var self = T(laddr: laddr, closed: false)
 
@@ -49,8 +49,8 @@ proc init*(T: type UdpConn, laddr: TransportAddress): T =
   self.udp = newDatagramTransport(onReceive, local = laddr)
   return self
 
-proc close*(self: UdpConn) =
-  ## Close an Udp Connection
+proc close*(self: UdpTransport) =
+  ## Close an Udp Transport
   ##
   if self.closed:
     debug "Trying to close an already closed UdpConn"
@@ -59,7 +59,7 @@ proc close*(self: UdpConn) =
   self.udp.close()
 
 proc write*(
-    self: UdpConn,
+    self: UdpTransport,
     raddr: TransportAddress,
     msg: seq[byte]
   ) {.async: (raises: [CancelledError, WebRtcError]).} =
@@ -75,7 +75,7 @@ proc write*(
     raise newException(WebRtcError,
       "UDP - Error when sending data on a DatagramTransport: " & exc.msg , exc)
 
-proc read*(self: UdpConn): Future[UdpPacketInfo] {.async: (raises: [CancelledError]).} =
+proc read*(self: UdpTransport): Future[UdpPacketInfo] {.async: (raises: [CancelledError]).} =
   ## Read the next received Udp message
   ##
   if self.closed:

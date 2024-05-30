@@ -9,7 +9,7 @@
 
 import tables
 import chronos, chronicles, bearssl
-import stun_connection, stun_message, ../udp_connection
+import stun_connection, stun_message, ../udp_transport
 
 logScope:
   topics = "webrtc stun stun_transport"
@@ -22,7 +22,7 @@ type
     connections: Table[TransportAddress, StunConn]
     pendingConn: AsyncQueue[StunConn]
     readingLoop: Future[void]
-    conn: UdpConn
+    udp: UdpTransport
 
     usernameProvider: StunUsernameProvider
     usernameChecker: StunUsernameChecker
@@ -49,7 +49,7 @@ proc connect*(
   self.connections.withValue(raddr, res):
     return res[]
   do:
-    let res = StunConn.new(self.conn, raddr, false, self.usernameProvider,
+    let res = StunConn.new(self.udp, raddr, false, self.usernameProvider,
       self.usernameChecker, self.passwordProvider, self.rng)
     self.connections[raddr] = res
     return res
@@ -64,10 +64,10 @@ proc cleanupStunConn(self: Stun, conn: StunConn) {.async: (raises: []).} =
 
 proc stunReadLoop(self: Stun) {.async: (raises: [CancelledError]).} =
   while true:
-    let (buf, raddr) = await self.conn.read()
+    let (buf, raddr) = await self.udp.read()
     var stunConn: StunConn
     if not self.connections.hasKey(raddr):
-      stunConn = StunConn.new(self.conn, raddr, true, self.usernameProvider,
+      stunConn = StunConn.new(self.udp, raddr, true, self.usernameProvider,
         self.usernameChecker, self.passwordProvider, self.rng)
       self.connections[raddr] = stunConn
       await self.pendingConn.addLast(stunConn)
@@ -96,7 +96,7 @@ proc defaultPasswordProvider(username: seq[byte]): seq[byte] = @[]
 
 proc new*(
     T: type Stun,
-    conn: UdpConn,
+    udp: UdpTransport,
     usernameProvider: StunUsernameProvider = defaultUsernameProvider,
     usernameChecker: StunUsernameChecker = defaultUsernameChecker,
     passwordProvider: StunPasswordProvider = defaultPasswordProvider,
@@ -105,7 +105,7 @@ proc new*(
   ## Initialize the Stun transport
   ##
   var self = T(
-    conn: conn,
+    udp: udp,
     usernameProvider: usernameProvider,
     usernameChecker: usernameChecker,
     passwordProvider: passwordProvider,
