@@ -30,9 +30,9 @@ import mbedtls/timing
 logScope:
   topics = "webrtc dtls"
 
-# Implementation of a DTLS client and a DTLS Server by using the mbedtls library.
+# Implementation of a DTLS client and a DTLS Server by using the Mbed-TLS library.
 # Multiple things here are unintuitive partly because of the callbacks
-# used by mbedtls and that those callbacks cannot be async.
+# used by Mbed-TLS and that those callbacks cannot be async.
 #
 # TODO:
 # - Check the viability of the add/pop first/last of the asyncqueue with the limit.
@@ -49,26 +49,32 @@ const PendingHandshakeLimit = 1024
 
 type
   DtlsConn* = ref object
-    conn: StunConn
-    laddr: TransportAddress
-    raddr*: TransportAddress
-    dataRecv: seq[byte]
+    conn: StunConn # The wrapper protocol Stun Connection
+    laddr: TransportAddress # Local address
+    raddr*: TransportAddress # Remote address
+    dataRecv: seq[byte] # data received which will be read by SCTP
     sendFuture: Future[void]
+    # This future is set by synchronous Mbed-TLS callbacks and waited, if set, once
+    # the synchronous functions ends
+
+    # Close connection management
     closed: bool
     closeEvent: AsyncEvent
 
-    timer: mbedtls_timing_delay_context
+    # Local and Remote certificate, needed by wrapped protocol DataChannel
+    # and by libp2p
+    localCert: seq[byte]
+    remoteCert: seq[byte]
 
+    # Mbed-TLS contexts
     ssl: mbedtls_ssl_context
     config: mbedtls_ssl_config
     cookie: mbedtls_ssl_cookie_ctx
     cache: mbedtls_ssl_cache_context
+    timer: mbedtls_timing_delay_context
 
     ctr_drbg: mbedtls_ctr_drbg_context
     entropy: mbedtls_entropy_context
-
-    localCert: seq[byte]
-    remoteCert: seq[byte]
 
 proc new(T: type DtlsConn, conn: StunConn, laddr: TransportAddress): T =
   ## Initialize a Dtls Connection
@@ -305,7 +311,7 @@ proc accept*(self: Dtls): Future[DtlsConn] {.async.} =
   mb_ssl_conf_ca_chain(res.config, srvcert.next, nil)
   mb_ssl_conf_own_cert(res.config, srvcert, pkey)
   mb_ssl_cookie_setup(res.cookie, mbedtls_ctr_drbg_random, res.ctr_drbg)
-  mb_ssl_conf_dtls_cookies(res.config, res.cookie)
+  mb_ssl_conf_dtls_cookies(res.config, addr res.cookie)
   mb_ssl_set_timer_cb(res.ssl, res.timer)
   mb_ssl_setup(res.ssl, res.config)
   mb_ssl_session_reset(res.ssl)
