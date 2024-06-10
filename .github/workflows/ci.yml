@@ -64,6 +64,8 @@ jobs:
 
       - name: Install deps
         run: |
+          python --version
+          python -m pip --version
           nimble install -dy
 
       - name: Run tests
