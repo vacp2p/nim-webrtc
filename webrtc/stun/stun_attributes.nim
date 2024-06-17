@@ -13,10 +13,9 @@ import binary_serialization,
        chronos
 import stun_utils
 
-# -- Attributes --
-# There are obviously some attributes implementation that are missing,
-# it might be something to do eventually if we want to make this
-# repository work for other project than nim-libp2p
+# Some attributes implementation are missing, it might be something to
+# add eventually if we want to make this repository work for
+# other project than nim-libp2p.
 #
 # Stun Attribute
 # 0                   1                   2                   3

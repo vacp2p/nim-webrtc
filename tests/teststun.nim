@@ -11,7 +11,7 @@
 
 import options
 import bearssl
-import ../webrtc/udp_connection
+import ../webrtc/udp_transport
 import ../webrtc/stun/stun_connection
 import ../webrtc/stun/stun_message
 import ../webrtc/stun/stun_attributes
@@ -30,9 +30,9 @@ proc passwordProvTest(username: seq[byte]): seq[byte] {.raises: [], gcsafe.} = @
 suite "Stun message encoding/decoding":
   test "Get BindingRequest + encode & decode with a set username":
     var
-      udpConn = UdpConn.init(AnyAddress)
+      udp = UdpTransport.new(AnyAddress)
       conn = StunConn.new(
-        udpConn,
+        udp,
         TransportAddress(AnyAddress),
         iceControlling=true,
         usernameProvider=usernameProvTest,
@@ -55,9 +55,9 @@ suite "Stun message encoding/decoding":
 
   test "Get BindingResponse from BindingRequest + encode & decode":
     var
-      udpConn = UdpConn.init(AnyAddress)
+      udp = UdpTransport.new(AnyAddress)
       conn = StunConn.new(
-        udpConn,
+        udp,
         TransportAddress(AnyAddress),
         iceControlling=false,
         usernameProvider=usernameProvTest,
@@ -81,9 +81,9 @@ suite "Stun message encoding/decoding":
 suite "Stun checkForError":
   test "checkForError: Missing MessageIntegrity or Username":
     var
-      udpConn = UdpConn.init(AnyAddress)
+      udp = UdpTransport.new(AnyAddress)
       conn = StunConn.new(
-        udpConn,
+        udp,
         TransportAddress(AnyAddress),
         iceControlling=false,
         usernameProvider=usernameProvEmpty, # Use of an empty username provider
@@ -107,9 +107,9 @@ suite "Stun checkForError":
 
   test "checkForError: UsernameChecker returns false":
     var
-      udpConn = UdpConn.init(AnyAddress)
+      udp = UdpTransport.new(AnyAddress)
       conn = StunConn.new(
-        udpConn,
+        udp,
         TransportAddress(AnyAddress),
         iceControlling=false,
         usernameProvider=usernameProvTest,

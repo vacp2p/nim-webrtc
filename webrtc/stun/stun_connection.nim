@@ -9,7 +9,7 @@
 
 import strutils
 import bearssl, chronos, chronicles, stew/[objects, byteutils]
-import ../[udp_connection, errors], stun_message, stun_attributes
+import ../[udp_transport, errors], stun_message, stun_attributes
 
 logScope:
   topics = "webrtc stun stun_connection"
@@ -29,7 +29,7 @@ type
   StunPasswordProvider* = proc(username: seq[byte]): seq[byte] {.raises: [], gcsafe.}
 
   StunConn* = ref object
-    conn*: UdpConn # Underlying UDP connexion
+    udp*: UdpTransport # The wrapper protocol: UDP Transport
     laddr*: TransportAddress # Local address
     raddr*: TransportAddress # Remote address
     dataRecv*: AsyncQueue[seq[byte]] # data received which will be read by DTLS
@@ -158,14 +158,14 @@ proc stunMessageHandler(self: StunConn) {.async: (raises: [CancelledError]).} =
         let errorOpt = self.checkForError(decoded)
         if errorOpt.isSome():
           let error = errorOpt.get()
-          await self.conn.write(self.raddr, error.encode(@[]))
+          await self.udp.write(self.raddr, error.encode(@[]))
           continue
 
         let
           bindingResponse = self.getBindingResponse(decoded)
           usernameAttr = decoded.getAttribute(UsernameAttribute).get()
           password = self.passwordProvider(usernameAttr.username)
-        await self.conn.write(
+        await self.udp.write(
           self.raddr,
           bindingResponse.encode(password)
         )
@@ -176,7 +176,7 @@ proc stunMessageHandler(self: StunConn) {.async: (raises: [CancelledError]).} =
 
 proc new*(
     T: type StunConn,
-    conn: UdpConn,
+    udp: UdpTransport,
     raddr: TransportAddress,
     iceControlling: bool,
     usernameProvider: StunUsernameProvider,
@@ -185,7 +185,7 @@ proc new*(
     rng: ref HmacDrbgContext
   ): T =
   ## Initialize a Stun Connection
-  ## `conn` the underlying Udp Connection
+  ## `udp` the wrapper protocol: Udp Transport
   ## `raddr` the remote address observed while receiving message with Udp
   ## `iceControlling` flag to know if we're supposed to act as a "client"
   ##   (controlling) or a "server" (controlled)
@@ -196,8 +196,8 @@ proc new*(
   ##   Message-integrity sha1 encryption
   ##
   var self = T(
-    conn: conn,
-    laddr: conn.laddr,
+    udp: udp,
+    laddr: udp.laddr,
     raddr: raddr,
     closed: false,
     closeEvent: newAsyncEvent(),
@@ -238,7 +238,7 @@ proc write*(
   if self.closed:
     debug "Try to write on an already closed StunConn"
     return
-  await self.conn.write(self.raddr, msg)
+  await self.udp.write(self.raddr, msg)
 
 proc read*(self: StunConn): Future[UdpPacketInfo] {.async: (raises: [CancelledError]).} =
   ## Read the next received non-Stun Message
