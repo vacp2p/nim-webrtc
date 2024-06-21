@@ -43,7 +43,6 @@ type
     ctr_drbg*: mbedtls_ctr_drbg_context
     entropy*: mbedtls_entropy_context
 
-
   DtlsConn* = ref object
     conn*: StunConn # The wrapper protocol Stun Connection
     laddr: TransportAddress # Local address
@@ -219,4 +218,3 @@ proc dtlsRecv*(ctx: pointer, buf: ptr byte, len: uint): cint {.cdecl.} =
   result = self.dataRecv.len().cint
   self.dataRecv = @[]
   trace "dtls receive", len, result
-
