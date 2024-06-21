@@ -33,13 +33,6 @@ logScope:
 # Implementation of a DTLS client and a DTLS Server by using the Mbed-TLS library.
 # Multiple things here are unintuitive partly because of the callbacks
 # used by Mbed-TLS and that those callbacks cannot be async.
-#
-# TODO:
-# - Check the viability of the add/pop first/last of the asyncqueue with the limit.
-#   There might be some errors (or crashes) with some edge cases with the no wait option
-
-# This limit is arbitrary, it could be interesting to make it configurable.
-const PendingHandshakeLimit = 1024
 
 # -- Dtls --
 
