@@ -37,7 +37,6 @@ logScope:
 # TODO:
 # - Check the viability of the add/pop first/last of the asyncqueue with the limit.
 #   There might be some errors (or crashes) with some edge cases with the no wait option
-# - Not critical - Check how to make a better use of MBEDTLS_ERR_SSL_WANT_WRITE
 
 # This limit is arbitrary, it could be interesting to make it configurable.
 const PendingHandshakeLimit = 1024
@@ -56,14 +55,6 @@ type
     serverPrivKey: mbedtls_pk_context
     serverCert: mbedtls_x509_crt
     localCert: seq[byte]
-
-proc updateOrAdd(aq: AsyncQueue[(TransportAddress, seq[byte])],
-                 raddr: TransportAddress, buf: seq[byte]) =
-  for kv in aq.mitems():
-    if kv[0] == raddr:
-      kv[1] = buf
-      return
-  aq.addLastNoWait((raddr, buf))
 
 proc new*(T: type Dtls, transport: Stun, laddr: TransportAddress): T =
   var self = T()
