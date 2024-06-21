@@ -15,6 +15,7 @@ import mbedtls/ctr_drbg
 import mbedtls/x509_crt
 import mbedtls/bignum
 import mbedtls/md
+import mbedtls/error
 
 # This sequence is used for debugging.
 const mb_ssl_states* = @[

@@ -40,7 +40,7 @@ type
   Dtls* = ref object of RootObj
     connections: Table[TransportAddress, DtlsConn]
     transport: Stun
-    laddr: TransportAddress
+    laddr*: TransportAddress
     started: bool
     ctr_drbg: mbedtls_ctr_drbg_context
     entropy: mbedtls_entropy_context
@@ -49,13 +49,13 @@ type
     serverCert: mbedtls_x509_crt
     localCert: seq[byte]
 
-proc new*(T: type Dtls, transport: Stun, laddr: TransportAddress): T =
-  var self = T()
-
-  self.connections = initTable[TransportAddress, DtlsConn]()
-  self.transport = transport
-  self.laddr = laddr
-  self.started = true
+proc new*(T: type Dtls, transport: Stun): T =
+  var self = T(
+    connections: initTable[TransportAddress, DtlsConn](),
+    transport: transport,
+    laddr: transport.laddr,
+    started: true
+  )
 
   mb_ctr_drbg_init(self.ctr_drbg)
   mb_entropy_init(self.entropy)
@@ -65,6 +65,7 @@ proc new*(T: type Dtls, transport: Stun, laddr: TransportAddress): T =
   self.serverCert = self.ctr_drbg.generateCertificate(self.serverPrivKey)
   self.localCert = newSeq[byte](self.serverCert.raw.len)
   copyMem(addr self.localCert[0], self.serverCert.raw.p, self.serverCert.raw.len)
+  return self
 
 proc stop*(self: Dtls) {.async.} =
   if not self.started:

@@ -21,8 +21,9 @@ type
   Stun* = ref object
     connections: Table[TransportAddress, StunConn]
     pendingConn: AsyncQueue[StunConn]
-    readingLoop: Future[void]
+    readingLoop: Future[void].Raising([CancelledError])
     udp: UdpTransport
+    laddr*: TransportAddress
 
     usernameProvider: StunUsernameProvider
     usernameChecker: StunUsernameChecker
@@ -106,11 +107,12 @@ proc new*(
   ##
   var self = T(
     udp: udp,
+    laddr: udp.laddr,
     usernameProvider: usernameProvider,
     usernameChecker: usernameChecker,
     passwordProvider: passwordProvider,
     rng: rng
   )
-  self.readingLoop = stunReadLoop()
+  self.readingLoop = self.stunReadLoop()
   self.pendingConn = newAsyncQueue[StunConn](StunMaxPendingConnections)
   return self
