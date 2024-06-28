@@ -39,3 +39,9 @@ suite "DTLS":
     await conn2.write(@[5'u8, 6, 7, 8])
     let seq2 = await conn1.read()
     check seq2 == @[5'u8, 6, 7, 8]
+    await allFutures(conn1.close(), conn2.close())
+    await allFutures(dtls1.stop(), dtls2.stop())
+    stun1.stop()
+    stun2.stop()
+    udp1.close()
+    udp2.close()

@@ -84,7 +84,7 @@ proc stunReadLoop(self: Stun) {.async: (raises: [CancelledError]).} =
     else:
       await stunConn.dataRecv.addLast(buf)
 
-proc stop(self: Stun) =
+proc stop*(self: Stun) =
   ## Stop the Stun transport and close all the connections
   ##
   for conn in self.connections.values():
