@@ -22,23 +22,23 @@ template asyncTest*(name: string, body: untyped): untyped =
   test name:
     waitFor((proc () {.async, gcsafe.} = body)())
 
-iterator testTrackers*(extras: openArray[string] = []): TrackerBase =
+iterator testTrackers*(extras: openArray[string] = []): TrackerCounter =
   for name in trackerNames:
-    let t = getTracker(name)
-    if not isNil(t): yield t
+    let t = getTrackerCounter(name)
+    yield t
   for name in extras:
-    let t = getTracker(name)
-    if not isNil(t): yield t
+    let t = getTrackerCounter(name)
+    yield t
 
 template checkTracker*(name: string) =
-  var tracker = getTracker(name)
-  if tracker.isLeaked():
+  var tracker = getTrackerCounter(name)
+  if tracker.isCounterLeaked():
     checkpoint tracker.dump()
     fail()
 
 template checkTrackers*() =
   for tracker in testTrackers():
-    if tracker.isLeaked():
+    if tracker.isCounterLeaked():
       checkpoint tracker.dump()
       fail()
   # Also test the GC is not fooling with us
