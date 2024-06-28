@@ -19,7 +19,8 @@ let verbose = getEnv("V", "") notin ["", "0"]
 
 var cfg =
   " --styleCheck:usages --styleCheck:error" &
-  (if verbose: "" else: " --verbosity:0 --hints:off") &
+  # (if verbose: "" else: " --verbosity:0 --hints:off") &
+  " --verbosity:3" &
   " --skipParentCfg --skipUserCfg -f" &
   " --threads:on --opt:speed"
 
