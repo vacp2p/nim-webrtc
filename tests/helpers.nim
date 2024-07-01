@@ -7,7 +7,6 @@ import chronos
 import unittest2
 export unittest2
 
-
 const
   DgramTransportTrackerName = "datagram.transport"
   UdpTransportTrackerName = "webrtc.udp.transport"
