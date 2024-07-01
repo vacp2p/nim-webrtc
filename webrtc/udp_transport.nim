@@ -52,15 +52,14 @@ proc new*(T: type UdpTransport, laddr: TransportAddress): T =
   trackCounter(UdpTransportTrackerName)
   return self
 
-proc stop*(self: UdpTransport) {.async: (raises: [CancelledError]).} =
+proc stop*(self: UdpTransport) {.async: (raises: []).} =
   ## Close an Udp Transport
   ##
   if self.closed:
     debug "Trying to stop an already stopped UdpTransport"
     return
   self.closed = true
-  self.udp.close()
-  await self.udp.join()
+  await self.udp.closeWait()
   untrackCounter(UdpTransportTrackerName)
 
 proc write*(
