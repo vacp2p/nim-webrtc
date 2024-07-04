@@ -52,7 +52,7 @@ proc new*(T: type UdpTransport, laddr: TransportAddress): T =
   trackCounter(UdpTransportTrackerName)
   return self
 
-proc stop*(self: UdpTransport) {.async: (raises: []).} =
+proc close*(self: UdpTransport) {.async: (raises: []).} =
   ## Close an Udp Transport
   ##
   if self.closed:

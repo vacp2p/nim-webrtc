@@ -12,7 +12,6 @@
 import chronos
 import options
 import bearssl
-import ./helpers
 import ../webrtc/udp_transport
 import ../webrtc/stun/stun_connection
 import ../webrtc/stun/stun_message
@@ -57,7 +56,7 @@ suite "Stun message encoding/decoding":
       messageIntegrity.attributeType == AttrMessageIntegrity.uint16
       fingerprint.attributeType == AttrFingerprint.uint16
     conn.close()
-    await udp.stop()
+    await udp.close()
 
   asyncTest "Get BindingResponse from BindingRequest + encode & decode":
     var
@@ -84,7 +83,7 @@ suite "Stun message encoding/decoding":
       messageIntegrity.attributeType == AttrMessageIntegrity.uint16
       fingerprint.attributeType == AttrFingerprint.uint16
     conn.close()
-    await udp.stop()
+    await udp.close()
 
 suite "Stun checkForError":
   teardown:
@@ -116,7 +115,7 @@ suite "Stun checkForError":
     check:
       errorMissUsername.getAttribute(ErrorCode).get().getErrorCode() == ECBadRequest
     conn.close()
-    await udp.stop()
+    await udp.close()
 
   asyncTest "checkForError: UsernameChecker returns false":
     var
@@ -138,4 +137,4 @@ suite "Stun checkForError":
     check:
       error.getAttribute(ErrorCode).get().getErrorCode() == ECUnauthorized
     conn.close()
-    await udp.stop()
+    await udp.close()
