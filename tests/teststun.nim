@@ -9,6 +9,7 @@
 
 {.used.}
 
+import chronos
 import options
 import bearssl
 import ./helpers
@@ -30,7 +31,7 @@ proc passwordProvTest(username: seq[byte]): seq[byte] {.raises: [], gcsafe.} = @
 
 suite "Stun message encoding/decoding":
   teardown:
-    checkTrackers()
+    checkLeaks()
 
   asyncTest "Get BindingRequest + encode & decode with a set username":
     var
@@ -87,7 +88,7 @@ suite "Stun message encoding/decoding":
 
 suite "Stun checkForError":
   teardown:
-    checkTrackers()
+    checkLeaks()
 
   asyncTest "checkForError: Missing MessageIntegrity or Username":
     var

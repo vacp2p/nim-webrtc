@@ -1,6 +1,7 @@
 import unittest2, chronos
+import chronos/unittest2/asynctests
 
-export unittest2, chronos
+export unittest2, chronos, asynctests
 
 template asyncTeardown*(body: untyped): untyped =
   teardown:
@@ -11,13 +12,6 @@ template asyncTeardown*(body: untyped): untyped =
 
 template asyncSetup*(body: untyped): untyped =
   setup:
-    waitFor((
-      proc() {.async, gcsafe.} =
-        body
-    )())
-
-template asyncTest*(name: string, body: untyped): untyped =
-  test name:
     waitFor((
       proc() {.async, gcsafe.} =
         body
