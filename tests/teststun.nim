@@ -9,6 +9,7 @@
 
 {.used.}
 
+import chronos
 import options
 import bearssl
 import ../webrtc/udp_transport
@@ -28,7 +29,10 @@ proc passwordProvEmpty(username: seq[byte]): seq[byte] {.raises: [], gcsafe.} = 
 proc passwordProvTest(username: seq[byte]): seq[byte] {.raises: [], gcsafe.} = @[1'u8, 2, 3, 4]
 
 suite "Stun message encoding/decoding":
-  test "Get BindingRequest + encode & decode with a set username":
+  teardown:
+    checkLeaks()
+
+  asyncTest "Get BindingRequest + encode & decode with a set username":
     var
       udp = UdpTransport.new(AnyAddress)
       conn = StunConn.new(
@@ -52,8 +56,9 @@ suite "Stun message encoding/decoding":
       messageIntegrity.attributeType == AttrMessageIntegrity.uint16
       fingerprint.attributeType == AttrFingerprint.uint16
     conn.close()
+    await udp.close()
 
-  test "Get BindingResponse from BindingRequest + encode & decode":
+  asyncTest "Get BindingResponse from BindingRequest + encode & decode":
     var
       udp = UdpTransport.new(AnyAddress)
       conn = StunConn.new(
@@ -77,9 +82,14 @@ suite "Stun message encoding/decoding":
       bindingResponse == decoded
       messageIntegrity.attributeType == AttrMessageIntegrity.uint16
       fingerprint.attributeType == AttrFingerprint.uint16
+    conn.close()
+    await udp.close()
 
 suite "Stun checkForError":
-  test "checkForError: Missing MessageIntegrity or Username":
+  teardown:
+    checkLeaks()
+
+  asyncTest "checkForError: Missing MessageIntegrity or Username":
     var
       udp = UdpTransport.new(AnyAddress)
       conn = StunConn.new(
@@ -104,8 +114,10 @@ suite "Stun checkForError":
 
     check:
       errorMissUsername.getAttribute(ErrorCode).get().getErrorCode() == ECBadRequest
+    conn.close()
+    await udp.close()
 
-  test "checkForError: UsernameChecker returns false":
+  asyncTest "checkForError: UsernameChecker returns false":
     var
       udp = UdpTransport.new(AnyAddress)
       conn = StunConn.new(
@@ -124,3 +136,5 @@ suite "Stun checkForError":
 
     check:
       error.getAttribute(ErrorCode).get().getErrorCode() == ECUnauthorized
+    conn.close()
+    await udp.close()

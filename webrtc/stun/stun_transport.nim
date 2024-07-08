@@ -15,6 +15,7 @@ logScope:
   topics = "webrtc stun stun_transport"
 
 const
+  StunTransportTracker* = "webrtc.stun.transport"
   StunMaxPendingConnections = 512
 
 type
@@ -90,6 +91,7 @@ proc stop*(self: Stun) =
   for conn in self.connections.values():
     conn.close()
   self.readingLoop.cancelSoon()
+  untrackCounter(StunTransportTracker)
 
 proc defaultUsernameProvider(): string = ""
 proc defaultUsernameChecker(username: seq[byte]): bool = true
@@ -115,4 +117,5 @@ proc new*(
   )
   self.readingLoop = self.stunReadLoop()
   self.pendingConn = newAsyncQueue[StunConn](StunMaxPendingConnections)
+  trackCounter(StunTransportTracker)
   return self
