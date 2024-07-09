@@ -97,7 +97,7 @@ proc dtlsHandshake*(
         let (data, _) = await self.conn.read()
         self.dataRecv = data
       self.sendFuture = nil
-      echo "self: ", self.isNil()
+      echo "self: ", self.isNil(), " ", mbedtls_ssl_handshake_step.isNil()
       if not self.isNil():
         echo "private_conf*: ", self.ctx.ssl.private_conf.isNil()
         echo "private_f_vrfy*: ", self.ctx.ssl.private_f_vrfy.isNil()
@@ -137,7 +137,12 @@ proc dtlsHandshake*(
         echo "private_f_export_keys*: ", self.ctx.ssl.private_f_export_keys.isNil()
         echo "private_p_export_keys*: ", self.ctx.ssl.private_p_export_keys.isNil()
 
-      let res = mb_ssl_handshake_step(self.ctx.ssl)
+
+      let res =
+        if isServer:
+          mb_ssl_handshake_step(self.ctx.ssl)
+        else:
+          mb_ssl_handshake_step(self.ctx.ssl)
       if not self.sendFuture.isNil():
         await self.sendFuture
       shouldRead = false
