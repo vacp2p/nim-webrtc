@@ -24,10 +24,6 @@ var cfg =
   " --skipParentCfg --skipUserCfg -f" &
   " --threads:on --opt:speed"
 
-when defined windows:
-  echo "Add -lws2_32 to cfg"
-  cfg = cfg & " --clib:ws2_32"
-
 import hashes
 
 proc runTest(filename: string) =
