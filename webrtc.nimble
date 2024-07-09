@@ -26,6 +26,7 @@ var cfg =
 
 when defined windows:
   cfg = cfg & " --clib:ws2_32"
+  cfg = cfg & " ---d:chronicles_enabled_topics=dtls_conn:TRACE"
 
 import hashes
 

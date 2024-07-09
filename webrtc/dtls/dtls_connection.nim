@@ -99,9 +99,7 @@ proc dtlsHandshake*(
       self.sendFuture = nil
       echo "self: ", self.isNil()
       if not self.isNil():
-        echo "self.ctx: ", self.ctx.isNil()
-        if not self.ctx.isNil():
-          echo "self.ctx.ssl: ", self.ctx.ssl.isNil()
+        trace "debug: ", ssl = self.ctx.ssl
       let res = mb_ssl_handshake_step(self.ctx.ssl)
       if not self.sendFuture.isNil():
         await self.sendFuture
