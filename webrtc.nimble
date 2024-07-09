@@ -24,6 +24,9 @@ var cfg =
   " --skipParentCfg --skipUserCfg -f" &
   " --threads:on --opt:speed"
 
+when defined windows:
+  cfg = cfg & " --clib:ws2_32"
+
 import hashes
 
 proc runTest(filename: string) =
