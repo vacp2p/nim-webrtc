@@ -220,14 +220,14 @@ proc join*(self: StunConn) {.async: (raises: [CancelledError]).} =
   ##
   await self.closeEvent.wait()
 
-proc close*(self: StunConn) =
+proc close*(self: StunConn) {.async: (raises: []).} =
   ## Close a Stun Connection
   ##
   if self.closed:
     debug "Try to close an already closed StunConn"
     return
   self.closeEvent.fire()
-  self.handlesFut.cancelSoon()
+  await self.handlesFut.cancelAndWait()
   self.closed = true
   untrackCounter(StunConnectionTracker)
 

@@ -7,7 +7,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import tables
+import tables, sequtils
 import chronos, chronicles, bearssl
 import stun_connection, stun_message, ../udp_transport
 
@@ -85,12 +85,16 @@ proc stunReadLoop(self: Stun) {.async: (raises: [CancelledError]).} =
     else:
       await stunConn.dataRecv.addLast(buf)
 
-proc stop*(self: Stun) =
+proc stop*(self: Stun) {.async: (raises: []).} =
   ## Stop the Stun transport and close all the connections
   ##
+  try:
+    await allFutures(toSeq(self.connections.values()).mapIt(it.close()))
+  except CancelledError as exc:
+    discard
   for conn in self.connections.values():
-    conn.close()
-  self.readingLoop.cancelSoon()
+    await conn.close()
+  await self.readingLoop.cancelAndWait()
   untrackCounter(StunTransportTracker)
 
 proc defaultUsernameProvider(): string = ""

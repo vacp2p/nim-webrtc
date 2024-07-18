@@ -44,9 +44,9 @@ suite "DTLS":
     echo 2222
     await allFutures(dtls1.stop(), dtls2.stop())
     echo 3333
-    stun1.stop()
+    await stun1.stop()
     echo 4444
-    stun2.stop()
+    await stun2.stop()
     echo 5555
     await udp1.close()
     echo 6666

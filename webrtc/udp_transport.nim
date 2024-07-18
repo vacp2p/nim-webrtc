@@ -23,6 +23,7 @@ type
     raddr: TransportAddress
 
   UdpTransport* = ref object
+    debug: int
     laddr*: TransportAddress
     udp: DatagramTransport
     dataRecv: AsyncQueue[UdpPacketInfo]
@@ -30,10 +31,10 @@ type
 
 const UdpTransportTrackerName* = "webrtc.udp.transport"
 
-proc new*(T: type UdpTransport, laddr: TransportAddress): T =
+proc new*(T: type UdpTransport, laddr: TransportAddress, debug: int = 0): T =
   ## Initialize an Udp Transport
   ##
-  var self = T(laddr: laddr, closed: false)
+  var self = T(laddr: laddr, closed: false, debug: debug)
 
   proc onReceive(
       udp: DatagramTransport,
@@ -56,7 +57,7 @@ proc close*(self: UdpTransport) {.async: (raises: []).} =
   ## Close an Udp Transport
   ##
   if self.closed:
-    debug "Trying to stop an already stopped UdpTransport"
+    debug "Trying to stop an already stopped UdpTransport", dbg=self.debug
     return
   self.closed = true
   await self.udp.closeWait()
@@ -70,7 +71,7 @@ proc write*(
   ## Write a message on Udp to a remote address `raddr`
   ##
   if self.closed:
-    debug "Try to write on an already closed UdpTransport"
+    debug "Try to write on an already closed UdpTransport", dbg=self.debug
     return
   trace "UDP write", msg
   try:
@@ -83,7 +84,7 @@ proc read*(self: UdpTransport): Future[UdpPacketInfo] {.async: (raises: [Cancell
   ## Read the next received Udp message
   ##
   if self.closed:
-    debug "Try to read on an already closed UdpTransport"
+    debug "Try to read on an already closed UdpTransport", dbg=self.debug
     return
   trace "UDP read"
   return await self.dataRecv.popFirst()
