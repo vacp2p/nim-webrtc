@@ -39,9 +39,16 @@ suite "DTLS":
     await conn2.write(@[5'u8, 6, 7, 8])
     let seq2 = await conn1.read()
     check seq2 == @[5'u8, 6, 7, 8]
+    echo 1111
     await allFutures(conn1.close(), conn2.close())
+    echo 2222
     await allFutures(dtls1.stop(), dtls2.stop())
+    echo 3333
     stun1.stop()
+    echo 4444
     stun2.stop()
+    echo 5555
     await udp1.close()
+    echo 6666
     await udp2.close()
+    echo 7777
