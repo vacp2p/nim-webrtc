@@ -19,13 +19,14 @@ let verbose = getEnv("V", "") notin ["", "0"]
 
 var cfg =
   " --styleCheck:usages --styleCheck:error" &
-  (if verbose: "" else: " --verbosity:0 --hints:off") &
+  # (if verbose: "" else: " --verbosity:0 --hints:off") &
+  " --verbosity:3" &
   " --skipParentCfg --skipUserCfg -f" &
   " --threads:on --opt:speed"
 
 when defined windows:
   cfg = cfg & " --clib:ws2_32"
-  cfg = cfg & " --d:chronicles_enabled_topics=dtls_conn:TRACE"
+cfg = cfg & " --d:chronicles_enabled_topics=dtls_conn:TRACE,dtls:TRACE,udp:TRACE"
 
 import hashes
 
