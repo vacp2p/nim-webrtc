@@ -10,15 +10,15 @@
 {.used.}
 
 import chronos
-import ./helpers
 import ../webrtc/udp_transport
 import ../webrtc/stun/stun_transport
 import ../webrtc/dtls/dtls_transport
 import ../webrtc/dtls/dtls_connection
+import ./asyncunit
 
 suite "DTLS":
   teardown:
-    checkTrackers()
+    checkLeaks()
 
   asyncTest "Simple Test":
     let
@@ -41,7 +41,5 @@ suite "DTLS":
     check seq2 == @[5'u8, 6, 7, 8]
     await allFutures(conn1.close(), conn2.close())
     await allFutures(dtls1.stop(), dtls2.stop())
-    stun1.stop()
-    stun2.stop()
-    udp1.close()
-    udp2.close()
+    await allFutures(stun1.stop(), stun2.stop())
+    await allFutures(udp1.close(), udp2.close())

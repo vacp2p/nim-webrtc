@@ -100,8 +100,8 @@ proc accept*(self: Dtls): Future[DtlsConn] {.async.} =
   res.ctx.ctr_drbg = self.ctr_drbg
   res.ctx.entropy = self.entropy
 
-  var pkey = self.serverPrivKey
-  var srvcert = self.serverCert
+  res.ctx.pkey = self.serverPrivKey
+  res.ctx.srvcert = self.serverCert
   res.localCert = self.localCert
 
   mb_ssl_config_defaults(
@@ -112,8 +112,8 @@ proc accept*(self: Dtls): Future[DtlsConn] {.async.} =
   )
   mb_ssl_conf_rng(res.ctx.config, mbedtls_ctr_drbg_random, res.ctx.ctr_drbg)
   mb_ssl_conf_read_timeout(res.ctx.config, 10000) # in milliseconds
-  mb_ssl_conf_ca_chain(res.ctx.config, srvcert.next, nil)
-  mb_ssl_conf_own_cert(res.ctx.config, srvcert, pkey)
+  mb_ssl_conf_ca_chain(res.ctx.config, res.ctx.srvcert.next, nil)
+  mb_ssl_conf_own_cert(res.ctx.config, res.ctx.srvcert, res.ctx.pkey)
   mb_ssl_cookie_setup(res.ctx.cookie, mbedtls_ctr_drbg_random, res.ctx.ctr_drbg)
   mb_ssl_conf_dtls_cookies(res.ctx.config, addr res.ctx.cookie)
   mb_ssl_set_timer_cb(res.ctx.ssl, res.ctx.timer)
@@ -145,10 +145,10 @@ proc connect*(self: Dtls, raddr: TransportAddress): Future[DtlsConn] {.async.} =
   res.ctx.ctr_drbg = self.ctr_drbg
   res.ctx.entropy = self.entropy
 
-  var pkey = res.ctx.ctr_drbg.generateKey()
-  var srvcert = res.ctx.ctr_drbg.generateCertificate(pkey)
-  res.localCert = newSeq[byte](srvcert.raw.len)
-  copyMem(addr res.localCert[0], srvcert.raw.p, srvcert.raw.len)
+  res.ctx.pkey = res.ctx.ctr_drbg.generateKey()
+  res.ctx.srvcert = res.ctx.ctr_drbg.generateCertificate(res.ctx.pkey)
+  res.localCert = newSeq[byte](res.ctx.srvcert.raw.len)
+  copyMem(addr res.localCert[0], res.ctx.srvcert.raw.p, res.ctx.srvcert.raw.len)
 
   mb_ctr_drbg_init(res.ctx.ctr_drbg)
   mb_entropy_init(res.ctx.entropy)
@@ -160,7 +160,7 @@ proc connect*(self: Dtls, raddr: TransportAddress): Future[DtlsConn] {.async.} =
                          MBEDTLS_SSL_PRESET_DEFAULT)
   mb_ssl_conf_rng(res.ctx.config, mbedtls_ctr_drbg_random, res.ctx.ctr_drbg)
   mb_ssl_conf_read_timeout(res.ctx.config, 10000) # in milliseconds
-  mb_ssl_conf_ca_chain(res.ctx.config, srvcert.next, nil)
+  mb_ssl_conf_ca_chain(res.ctx.config, res.ctx.srvcert.next, nil)
   mb_ssl_set_timer_cb(res.ctx.ssl, res.ctx.timer)
   mb_ssl_setup(res.ctx.ssl, res.ctx.config)
   mb_ssl_set_verify(res.ctx.ssl, verify, res)

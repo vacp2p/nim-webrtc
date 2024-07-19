@@ -39,6 +39,8 @@ type
     cookie*: mbedtls_ssl_cookie_ctx
     cache*: mbedtls_ssl_cache_context
     timer*: mbedtls_timing_delay_context
+    pkey*: mbedtls_pk_context
+    srvcert*: mbedtls_x509_crt
 
     ctr_drbg*: mbedtls_ctr_drbg_context
     entropy*: mbedtls_entropy_context
