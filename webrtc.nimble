@@ -41,8 +41,8 @@ proc runTest(filename: string) =
   exec excstr & " -r " & " tests/" & filename
   rmFile "tests/" & filename.toExe
 
-task test, "Runs the test suite":
-  # runTest("runalltests")
+task test, "Run the test suite":
+  runTest("runalltests")
   exec "nimble build_example"
 
 task build_example, "Build the examples":
