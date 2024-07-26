@@ -67,7 +67,7 @@ proc handleAccept(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
   conn.acceptEvent.fire()
 
 proc handleConnect(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
-  # Callback procedure called when connecting
+  # Callback procedure called during usrsctp_connect
   let
     conn = cast[SctpConn](data)
     events = usrsctp_get_events(sock)
