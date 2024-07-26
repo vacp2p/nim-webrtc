@@ -13,7 +13,6 @@ import usrsctp
 import ../errors
 import ../dtls/[dtls_transport, dtls_connection]
 import ./[sctp_connection, sctp_utils]
-import binary_serialization
 
 export chronicles
 
@@ -130,23 +129,61 @@ proc readLoopProc(res: SctpConn) {.async.} =
       usrsctp_freedumpbuffer(data)
     usrsctp_conninput(cast[pointer](res), unsafeAddr msg[0], uint(msg.len), 0)
 
+proc socketSetup(
+  conn: SctpConn,
+  callback: proc (a1: ptr socket, a2: pointer, a3: cint) {.cdecl.}
+): bool =
+  var
+    errorCode = conn.sctpSocket.usrsctp_set_non_blocking(1)
+    nodelay: uint32 = 1
+    recvinfo: uint32 = 1
+
+  if errorCode != 0:
+    warn "usrsctp_set_non_blocking fails", error = sctpStrerror(errorCode)
+    return false
+
+  errorCode = conn.sctpSocket.usrsctp_set_upcall(callback, cast[pointer](conn))
+  if errorCode != 0:
+    warn "usrsctp_set_upcall fails", error = sctpStrerror(errorCode)
+    return false
+
+  errorCode = conn.sctpSocket.usrsctp_setsockopt(
+    IPPROTO_SCTP,
+    SCTP_NODELAY,
+    addr nodelay,
+    sizeof(nodelay).SockLen,
+  )
+  if errorCode != 0:
+    warn "usrsctp_setsockopt nodelay fails", error = sctpStrerror(errorCode)
+    return false
+
+  errorCode = conn.sctpSocket.usrsctp_setsockopt(
+    IPPROTO_SCTP,
+    SCTP_RECVRCVINFO,
+    addr recvinfo,
+    sizeof(recvinfo).SockLen,
+  )
+  if errorCode != 0:
+    warn "usrsctp_setsockopt recvinfo fails", error = sctpStrerror(errorCode)
+    return false
+  return true
+
 proc accept*(self: Sctp): Future[SctpConn] {.async.} =
+  ## Accept an Sctp Connection
+  ##
   if not self.isServer:
     raise newException(WebRtcError, "SCTP - Not a server")
-  var conn = SctpConn.new(await self.dtls.accept())
-  usrsctp_register_address(cast[pointer](conn))
-  conn.readLoop = conn.readLoopProc()
-  conn.acceptEvent.clear()
-  await conn.acceptEvent.wait()
+  var conn: SctpConn
+  while true:
+    conn = SctpConn.new(await self.dtls.accept())
+    usrsctp_register_address(cast[pointer](conn))
+    conn.readLoop = conn.readLoopProc()
+    conn.acceptEvent.clear()
+    await conn.acceptEvent.wait()
+    if conn.state == SctpConnected or conn.socketSetup(recvCallback):
+      break
+    await conn.close()
 
-  var nodelay: uint32 = 1
-  var recvinfo: uint32 = 1
-  doAssert 0 == conn.sctpSocket.usrsctp_set_non_blocking(1)
-  doAssert 0 == conn.sctpSocket.usrsctp_set_upcall(recvCallback, cast[pointer](conn))
-  doAssert 0 == conn.sctpSocket.usrsctp_setsockopt(IPPROTO_SCTP, SCTP_NODELAY,
-                                 addr nodelay, sizeof(nodelay).SockLen)
-  doAssert 0 == conn.sctpSocket.usrsctp_setsockopt(IPPROTO_SCTP, SCTP_RECVRCVINFO,
-                                 addr recvinfo, sizeof(recvinfo).SockLen)
   self.connections[conn.raddr] = conn
   return conn
 
@@ -174,33 +211,29 @@ proc listen*(self: Sctp, sctpPort: uint16 = 5000) =
 proc connect*(self: Sctp,
               raddr: TransportAddress,
               sctpPort: uint16 = 5000): Future[SctpConn] {.async.} =
-  let
-    sctpSocket = usrsctp_socket(AF_CONN, posix.SOCK_STREAM, IPPROTO_SCTP, nil, nil, 0, nil)
-    conn = SctpConn.new(await self.dtls.connect(raddr))
-
   trace "Create Connection", raddr
-  conn.sctpSocket = sctpSocket
-  conn.state = SctpConnected
-  var nodelay: uint32 = 1
-  var recvinfo: uint32 = 1
-  doAssert 0 == usrsctp_set_non_blocking(conn.sctpSocket, 1)
-  doAssert 0 == usrsctp_set_upcall(conn.sctpSocket, handleConnect, cast[pointer](conn))
-  doAssert 0 == conn.sctpSocket.usrsctp_setsockopt(IPPROTO_SCTP, SCTP_NODELAY,
-                                 addr nodelay, sizeof(nodelay).SockLen)
-  doAssert 0 == conn.sctpSocket.usrsctp_setsockopt(IPPROTO_SCTP, SCTP_RECVRCVINFO,
-                                 addr recvinfo, sizeof(recvinfo).SockLen)
+  let conn = SctpConn.new(await self.dtls.connect(raddr))
+  conn.state = SctpConnecting
+  conn.sctpSocket = usrsctp_socket(AF_CONN, posix.SOCK_STREAM, IPPROTO_SCTP, nil, nil, 0, nil)
+
+  if not conn.socketSetup(handleConnect):
+    raise newException(WebRtcError, "SCTP - Socket setup failed while connecting")
+
   var sconn: Sockaddr_conn
   sconn.sconn_family = AF_CONN
   sconn.sconn_port = htons(sctpPort)
   sconn.sconn_addr = cast[pointer](conn)
   usrsctp_register_address(cast[pointer](conn))
   conn.readLoop = conn.readLoopProc()
+
   let connErr = self.usrsctpAwait:
     conn.sctpSocket.usrsctp_connect(cast[ptr SockAddr](addr sconn), SockLen(sizeof(sconn)))
-  doAssert 0 == connErr or errno == posix.EINPROGRESS, ($errno)
-  conn.state = SctpConnecting
+  if connErr != 0 and errno != posix.EINPROGRESS:
+    raise newException(WebRtcError, "SCTP - Connection failed " & $(sctpStrerror(errno)))
+
   conn.connectEvent.clear()
   await conn.connectEvent.wait()
-  # TODO: check connection state, if closed throw an exception
+  if conn.state == SctpClosed:
+    raise newException(WebRtcError, "SCTP - Connection failed")
   self.connections[raddr] = conn
   return conn
