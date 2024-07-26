@@ -1,8 +1,8 @@
 import chronos, stew/byteutils
-import ../webrtc/udp_connection
-import ../webrtc/stun/stun_connection
-import ../webrtc/dtls/dtls
-import ../webrtc/sctp
+import ../webrtc/udp_transport
+import ../webrtc/stun/stun_transport
+import ../webrtc/dtls/dtls_transport
+import ../webrtc/sctp/[sctp_transport, sctp_connection]
 
 proc sendPong(conn: SctpConn) {.async.} =
   var i = 0
@@ -14,14 +14,11 @@ proc sendPong(conn: SctpConn) {.async.} =
 
 proc main() {.async.} =
   let laddr = initTAddress("127.0.0.1:4242")
-  let udp = UdpConn()
-  udp.init(laddr)
-  let stun = StunConn()
-  stun.init(udp, laddr)
-  let dtls = Dtls()
-  dtls.init(stun, laddr)
-  let sctp = Sctp()
-  sctp.init(dtls, laddr)
+  let udp = UdpTransport.new(laddr)
+  let stun = Stun.new(udp)
+  let dtls = Dtls.new(stun)
+  let sctp = Sctp.new(dtls)
+
   sctp.listen(13)
   while true:
     let conn = await sctp.accept()
