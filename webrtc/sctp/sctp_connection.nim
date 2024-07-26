@@ -8,7 +8,7 @@
 # those terms.
 
 import posix
-import chronos, chronicles, stew/[endians2, byteutils]
+import chronos, chronicles, stew/[ptrops, endians2, byteutils]
 import usrsctp
 import ./sctp_utils
 import ../errors
@@ -47,6 +47,34 @@ type
     dataRecv*: AsyncQueue[SctpMessage]
     sentFuture*: Future[void]
 
+# -- usrsctp send data callback --
+
+proc sendCallback*(ctx: pointer,
+                   buffer: pointer,
+                   length: uint,
+                   tos: uint8,
+                   set_df: uint8): cint {.cdecl.} =
+  # This proc is called by usrsctp everytime usrsctp tries to send data.
+  let data = usrsctp_dumppacket(buffer, length, SCTP_DUMP_OUTBOUND)
+  if data != nil:
+    trace "sendCallback", sctpPacket = data.getSctpPacket(), length
+    usrsctp_freedumpbuffer(data)
+  let sctpConn = cast[SctpConn](ctx)
+  let buf = @(buffer.makeOpenArray(byte, int(length)))
+  proc testSend() {.async.} =
+    try:
+      trace "Send To", address = sctpConn.address
+      await sctpConn.conn.write(buf)
+    except CatchableError as exc:
+      trace "Send Failed", message = exc.msg
+  sctpConn.sentFuture = testSend()
+
+proc toFlags(params: SctpMessageParameters): uint16 =
+  if params.endOfRecord:
+    result = result or SCTP_EOR
+  if params.unordered:
+    result = result or SCTP_UNORDERED
+
 proc new*(T: typedesc[SctpConn], conn: DtlsConn): T =
   T(conn: conn,
     state: Connecting,
@@ -59,12 +87,6 @@ proc read*(self: SctpConn): Future[SctpMessage] {.async.} =
   # Used by DataChannel, returns SctpMessage in order to get the stream
   # and protocol ids
   return await self.dataRecv.popFirst()
-
-proc toFlags(params: SctpMessageParameters): uint16 =
-  if params.endOfRecord:
-    result = result or SCTP_EOR
-  if params.unordered:
-    result = result or SCTP_UNORDERED
 
 proc write*(self: SctpConn, buf: seq[byte],
     sendParams = default(SctpMessageParameters)) {.async.} =

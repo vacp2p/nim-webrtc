@@ -45,36 +45,7 @@ type
     pendingConnections2: Table[SockAddr, SctpConn]
     sentFuture: Future[void]
 
-  # These three objects are used for debugging/trace only
-  SctpChunk = object
-    chunkType: uint8
-    flag: uint8
-    length {.bin_value: it.data.len() + 4.}: uint16
-    data {.bin_len: it.length - 4.}: seq[byte]
-
-  SctpPacketHeader = object
-    srcPort: uint16
-    dstPort: uint16
-    verifTag: uint32
-    checksum: uint32
-
-  SctpPacketStructure = object
-    header: SctpPacketHeader
-    chunks: seq[SctpChunk]
-
 const IPPROTO_SCTP = 132
-
-proc getSctpPacket(buffer: seq[byte]): SctpPacketStructure =
-  # Only used for debugging/trace
-  result.header = Binary.decode(buffer, SctpPacketHeader)
-  var size = sizeof(SctpPacketStructure)
-  while size < buffer.len:
-    let chunk = Binary.decode(buffer[size..^1], SctpChunk)
-    result.chunks.add(chunk)
-    size.inc(chunk.length.int)
-    while size mod 4 != 0:
-      # padding; could use `size.inc(-size %% 4)` instead but it lacks clarity
-      size.inc(1)
 
 # -- usrsctp receive data callbacks --
 
@@ -170,27 +141,6 @@ proc handleConnect(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
     conn.connectEvent.fire()
   else:
     warn "should be connecting", currentState = conn.state
-
-# -- usrsctp send data callback --
-
-proc sendCallback(ctx: pointer,
-                  buffer: pointer,
-                  length: uint,
-                  tos: uint8,
-                  set_df: uint8): cint {.cdecl.} =
-  let data = usrsctp_dumppacket(buffer, length, SCTP_DUMP_OUTBOUND)
-  if data != nil:
-    trace "sendCallback", sctpPacket = data.getSctpPacket(), length
-    usrsctp_freedumpbuffer(data)
-  let sctpConn = cast[SctpConn](ctx)
-  let buf = @(buffer.makeOpenArray(byte, int(length)))
-  proc testSend() {.async.} =
-    try:
-      trace "Send To", address = sctpConn.address
-      await sctpConn.conn.write(buf)
-    except CatchableError as exc:
-      trace "Send Failed", message = exc.msg
-  sctpConn.sentFuture = testSend()
 
 # -- Sctp --
 
