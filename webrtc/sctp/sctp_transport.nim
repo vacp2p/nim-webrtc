@@ -8,10 +8,11 @@
 # those terms.
 
 import tables, bitops, posix, strutils, sequtils
-import chronos, chronicles, stew/[ranges/ptr_arith, byteutils, endians2]
+import chronos, chronicles, stew/[ranges/ptr_arith, endians2]
 import usrsctp
-import ../dtls/dtls_transport
-import ./sctp_connection
+import ../errors
+import ../dtls/[dtls_transport, dtls_connection]
+import ./[sctp_connection, sctp_utils]
 import binary_serialization
 
 export chronicles
@@ -35,7 +36,6 @@ type
   Sctp* = ref object
     dtls: Dtls
     laddr*: TransportAddress
-    udp: DatagramTransport
     connections: Table[TransportAddress, SctpConn]
     gotConnection: AsyncEvent
     timersHandler: Future[void]
@@ -210,21 +210,21 @@ proc stopServer*(self: Sctp) =
     pc.sctpSocket.usrsctp_close()
   self.sockServer.usrsctp_close()
 
-proc new*(T: type Sctp, dtls: Dtls) =
+proc new*(T: type Sctp, dtls: Dtls): T =
+  var self = T()
   self.gotConnection = newAsyncEvent()
   self.timersHandler = timersHandler()
   self.dtls = dtls
-
 
   usrsctp_init_nothreads(dtls.laddr.port.uint16, sendCallback, printf)
   discard usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_NONE)
   discard usrsctp_sysctl_set_sctp_ecn_enable(1)
   usrsctp_register_address(cast[pointer](self))
+  return self
 
 proc stop*(self: Sctp) {.async.} =
   # TODO: close every connections
   discard self.usrsctpAwait usrsctp_finish()
-  self.udp.close()
 
 proc readLoopProc(res: SctpConn) {.async.} =
   while true:
@@ -239,8 +239,8 @@ proc readLoopProc(res: SctpConn) {.async.} =
 
 proc accept*(self: Sctp): Future[SctpConn] {.async.} =
   if not self.isServer:
-    raise newException(SctpError, "Not a server")
-  var res = SctpConn.new(await self.dtls.accept(), self)
+    raise newException(WebRtcError, "SCTP - Not a server")
+  var res = SctpConn.new(await self.dtls.accept())
   usrsctp_register_address(cast[pointer](res))
   res.readLoop = res.readLoopProc()
   res.acceptEvent.clear()
@@ -273,7 +273,7 @@ proc connect*(self: Sctp,
               sctpPort: uint16 = 5000): Future[SctpConn] {.async.} =
   let
     sctpSocket = usrsctp_socket(AF_CONN, posix.SOCK_STREAM, IPPROTO_SCTP, nil, nil, 0, nil)
-    conn = SctpConn.new(await self.dtls.connect(address), self)
+    conn = SctpConn.new(await self.dtls.connect(address))
 
   trace "Create Connection", address
   conn.sctpSocket = sctpSocket

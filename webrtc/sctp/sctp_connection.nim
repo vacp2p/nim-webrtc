@@ -7,18 +7,20 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import chronos, chronicles
+import posix
+import chronos, chronicles, stew/[endians2, byteutils]
 import usrsctp
 import ./sctp_utils
 import ../errors
+import ../dtls/dtls_connection
 
 logScope:
   topics = "webrtc sctp_connection"
 
-proc sctpStrerror(error: cint): cstring {.importc: "strerror", cdecl, header: "<string.h>".}
+proc sctpStrerror(error: int): cstring {.importc: "strerror", cdecl, header: "<string.h>".}
 
 type
-  SctpState = enum
+  SctpState* = enum
     Connecting
     Connected
     Closed
@@ -31,22 +33,21 @@ type
 
   SctpMessage* = ref object
     data*: seq[byte]
-    info: sctp_recvv_rn
+    info*: sctp_recvv_rn
     params*: SctpMessageParameters
 
   SctpConn* = ref object
     conn*: DtlsConn
-    state: SctpState
-    connectEvent: AsyncEvent
-    acceptEvent: AsyncEvent
-    readLoop: Future[void]
-    udp: DatagramTransport
-    address: TransportAddress
-    sctpSocket: ptr socket
-    dataRecv: AsyncQueue[SctpMessage]
-    sentFuture: Future[void]
+    state*: SctpState
+    connectEvent*: AsyncEvent
+    acceptEvent*: AsyncEvent
+    readLoop*: Future[void]
+    address*: TransportAddress
+    sctpSocket*: ptr socket
+    dataRecv*: AsyncQueue[SctpMessage]
+    sentFuture*: Future[void]
 
-proc new(T: typedesc[SctpConn], conn: DtlsConn): T =
+proc new*(T: typedesc[SctpConn], conn: DtlsConn): T =
   T(conn: conn,
     state: Connecting,
     connectEvent: AsyncEvent(),
