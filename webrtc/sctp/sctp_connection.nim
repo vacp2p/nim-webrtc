@@ -7,7 +7,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import posix
+import posix, bitops
 import chronos, chronicles, stew/[ptrops, endians2, byteutils]
 import usrsctp
 import ./sctp_utils
@@ -17,6 +17,7 @@ import ../dtls/dtls_connection
 logScope:
   topics = "webrtc sctp_connection"
 
+# TODO: closing connection if usrsctp_recv / usrsctp_read fails
 proc sctpStrerror(error: int): cstring {.importc: "strerror", cdecl, header: "<string.h>".}
 
 type
@@ -47,7 +48,58 @@ type
     dataRecv*: AsyncQueue[SctpMessage]
     sentFuture*: Future[void]
 
-# -- usrsctp send data callback --
+# -- usrsctp send and receive callback --
+
+proc recvCallback*(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
+  # Callback procedure called when we receive data after
+  # connection has been established.
+  let
+    conn = cast[SctpConn](data)
+    events = usrsctp_get_events(sock)
+
+  trace "Handle Upcall", events
+  if bitand(events, SCTP_EVENT_READ) != 0:
+    var
+      message = SctpMessage(
+        data: newSeq[byte](4096)
+      )
+      address: Sockaddr_storage
+      rn: sctp_recvv_rn
+      addressLen = sizeof(Sockaddr_storage).SockLen
+      rnLen = sizeof(sctp_recvv_rn).SockLen
+      infotype: uint
+      flags: int
+    let n = sock.usrsctp_recvv(cast[pointer](addr message.data[0]),
+                               message.data.len.uint,
+                               cast[ptr SockAddr](addr address),
+                               cast[ptr SockLen](addr addressLen),
+                               cast[pointer](addr message.info),
+                               cast[ptr SockLen](addr rnLen),
+                               cast[ptr cuint](addr infotype),
+                               cast[ptr cint](addr flags))
+    if n < 0:
+      trace "usrsctp_recvv", error = sctpStrerror(n)
+      # TODO: should close
+      return
+    elif n > 0:
+      # It might be necessary to check if infotype == SCTP_RECVV_RCVINFO
+      message.data.delete(n..<message.data.len())
+      trace "message info from handle upcall", msginfo = message.info
+      message.params = SctpMessageParameters(
+          protocolId: message.info.recvv_rcvinfo.rcv_ppid.swapBytes(),
+          streamId: message.info.recvv_rcvinfo.rcv_sid
+        )
+      if bitand(flags, MSG_NOTIFICATION) != 0:
+        trace "Notification received", length = n
+      else:
+        try:
+          conn.dataRecv.addLastNoWait(message)
+        except AsyncQueueFullError:
+          trace "Queue full, dropping packet"
+  elif bitand(events, SCTP_EVENT_WRITE) != 0:
+    trace "sctp event write in the upcall"
+  else:
+    warn "Handle Upcall unexpected event", events
 
 proc sendCallback*(ctx: pointer,
                    buffer: pointer,

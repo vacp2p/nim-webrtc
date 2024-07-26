@@ -7,7 +7,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import tables, bitops, posix, strutils, sequtils
+import tables, posix, strutils, sequtils
 import chronos, chronicles, stew/[ranges/ptr_arith, endians2]
 import usrsctp
 import ../errors
@@ -29,7 +29,6 @@ logScope:
 # - Replace doAssert by a proper exception management
 # - Find a clean way to manage SCTP ports
 
-proc perror(error: cstring) {.importc, cdecl, header: "<errno.h>".}
 proc printf(format: cstring) {.cdecl, importc: "printf", varargs, header: "<stdio.h>", gcsafe.}
 
 type
@@ -49,56 +48,6 @@ const IPPROTO_SCTP = 132
 
 # -- usrsctp receive data callbacks --
 
-proc handleUpcall(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
-  # Callback procedure called when we receive data after
-  # connection has been established.
-  let
-    conn = cast[SctpConn](data)
-    events = usrsctp_get_events(sock)
-
-  trace "Handle Upcall", events
-  if bitand(events, SCTP_EVENT_READ) != 0:
-    var
-      message = SctpMessage(
-        data: newSeq[byte](4096)
-      )
-      address: Sockaddr_storage
-      rn: sctp_recvv_rn
-      addressLen = sizeof(Sockaddr_storage).SockLen
-      rnLen = sizeof(sctp_recvv_rn).SockLen
-      infotype: uint
-      flags: int
-    let n = sock.usrsctp_recvv(cast[pointer](addr message.data[0]),
-                               message.data.len.uint,
-                               cast[ptr SockAddr](addr address),
-                               cast[ptr SockLen](addr addressLen),
-                               cast[pointer](addr message.info),
-                               cast[ptr SockLen](addr rnLen),
-                               cast[ptr cuint](addr infotype),
-                               cast[ptr cint](addr flags))
-    if n < 0:
-      perror("usrsctp_recvv")
-      return
-    elif n > 0:
-      # It might be necessary to check if infotype == SCTP_RECVV_RCVINFO
-      message.data.delete(n..<message.data.len())
-      trace "message info from handle upcall", msginfo = message.info
-      message.params = SctpMessageParameters(
-          protocolId: message.info.recvv_rcvinfo.rcv_ppid.swapBytes(),
-          streamId: message.info.recvv_rcvinfo.rcv_sid
-        )
-      if bitand(flags, MSG_NOTIFICATION) != 0:
-        trace "Notification received", length = n
-      else:
-        try:
-          conn.dataRecv.addLastNoWait(message)
-        except AsyncQueueFullError:
-          trace "Queue full, dropping packet"
-  elif bitand(events, SCTP_EVENT_WRITE) != 0:
-    trace "sctp event write in the upcall"
-  else:
-    warn "Handle Upcall unexpected event", events
-
 proc handleAccept(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
   # Callback procedure called when accepting a connection.
   trace "Handle Accept"
@@ -116,7 +65,7 @@ proc handleAccept(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
   var nodelay: uint32 = 1
   var recvinfo: uint32 = 1
   doAssert 0 == sctpSocket.usrsctp_set_non_blocking(1)
-  doAssert 0 == conn.sctpSocket.usrsctp_set_upcall(handleUpcall, cast[pointer](conn))
+  doAssert 0 == conn.sctpSocket.usrsctp_set_upcall(recvCallback, cast[pointer](conn))
   doAssert 0 == conn.sctpSocket.usrsctp_setsockopt(IPPROTO_SCTP, SCTP_NODELAY,
                                  addr nodelay, sizeof(nodelay).SockLen)
   doAssert 0 == conn.sctpSocket.usrsctp_setsockopt(IPPROTO_SCTP, SCTP_RECVRCVINFO,
@@ -137,7 +86,7 @@ proc handleConnect(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
       conn.state = Closed
     elif bitand(events, SCTP_EVENT_WRITE) != 0:
       conn.state = Connected
-      doAssert 0 == usrsctp_set_upcall(conn.sctpSocket, handleUpcall, data)
+      doAssert 0 == usrsctp_set_upcall(conn.sctpSocket, recvCallback, data)
     conn.connectEvent.fire()
   else:
     warn "should be connecting", currentState = conn.state
