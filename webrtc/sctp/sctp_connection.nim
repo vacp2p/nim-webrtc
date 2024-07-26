@@ -41,7 +41,7 @@ type
     connectEvent*: AsyncEvent
     acceptEvent*: AsyncEvent
     readLoop*: Future[void]
-    address*: TransportAddress
+    raddr*: TransportAddress
     sctpSocket*: ptr socket
     dataRecv*: AsyncQueue[SctpMessage]
     sentFuture*: Future[void]
@@ -130,6 +130,7 @@ proc new*(T: typedesc[SctpConn], conn: DtlsConn): T =
     state: SctpConnecting,
     connectEvent: AsyncEvent(),
     acceptEvent: AsyncEvent(),
+    raddr: conn.raddr,
     dataRecv: newAsyncQueue[SctpMessage]()
    )
 

@@ -76,7 +76,7 @@ proc handleConnect(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
   trace "Handle Connect", events, state = conn.state
   if conn.state == SctpConnecting:
     if bitand(events, SCTP_EVENT_ERROR) != 0:
-      warn "Cannot connect", address = conn.address
+      warn "Cannot connect", raddr = conn.raddr
       conn.state = SctpClosed
     elif bitand(events, SCTP_EVENT_WRITE) != 0:
       conn.state = SctpConnected
@@ -147,6 +147,7 @@ proc accept*(self: Sctp): Future[SctpConn] {.async.} =
                                  addr nodelay, sizeof(nodelay).SockLen)
   doAssert 0 == conn.sctpSocket.usrsctp_setsockopt(IPPROTO_SCTP, SCTP_RECVRCVINFO,
                                  addr recvinfo, sizeof(recvinfo).SockLen)
+  self.connections[conn.raddr] = conn
   return conn
 
 proc listen*(self: Sctp, sctpPort: uint16 = 5000) =
@@ -171,13 +172,13 @@ proc listen*(self: Sctp, sctpPort: uint16 = 5000) =
   self.sockServer = sock
 
 proc connect*(self: Sctp,
-              address: TransportAddress,
+              raddr: TransportAddress,
               sctpPort: uint16 = 5000): Future[SctpConn] {.async.} =
   let
     sctpSocket = usrsctp_socket(AF_CONN, posix.SOCK_STREAM, IPPROTO_SCTP, nil, nil, 0, nil)
-    conn = SctpConn.new(await self.dtls.connect(address))
+    conn = SctpConn.new(await self.dtls.connect(raddr))
 
-  trace "Create Connection", address
+  trace "Create Connection", raddr
   conn.sctpSocket = sctpSocket
   conn.state = SctpConnected
   var nodelay: uint32 = 1
@@ -201,5 +202,5 @@ proc connect*(self: Sctp,
   conn.connectEvent.clear()
   await conn.connectEvent.wait()
   # TODO: check connection state, if closed throw an exception
-  self.connections[address] = conn
+  self.connections[raddr] = conn
   return conn
