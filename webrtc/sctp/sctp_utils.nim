@@ -9,6 +9,8 @@
 
 import binary_serialization
 
+proc sctpStrerror*(error: int): cstring {.importc: "strerror", cdecl, header: "<string.h>".}
+
 type
   # These three objects are used for debugging/trace only
   SctpChunk* = object

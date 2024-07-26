@@ -46,46 +46,40 @@ type
 
 const IPPROTO_SCTP = 132
 
-# -- usrsctp receive data callbacks --
+# -- usrsctp accept and connect callbacks --
 
 proc handleAccept(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
-  # Callback procedure called when accepting a connection.
+  # Callback procedure called when accepting a connection
   trace "Handle Accept"
   var
     sconn: Sockaddr_conn
     slen: Socklen = sizeof(Sockaddr_conn).uint32
   let
     sctp = cast[Sctp](data)
-    # TODO: check if sctpSocket != nil
     sctpSocket = usrsctp_accept(sctp.sockServer, cast[ptr SockAddr](addr sconn), addr slen)
+    conn = cast[SctpConn](sconn.sconn_addr)
 
-  let conn = cast[SctpConn](sconn.sconn_addr)
-  conn.sctpSocket = sctpSocket
-  conn.state = Connected
-  var nodelay: uint32 = 1
-  var recvinfo: uint32 = 1
-  doAssert 0 == sctpSocket.usrsctp_set_non_blocking(1)
-  doAssert 0 == conn.sctpSocket.usrsctp_set_upcall(recvCallback, cast[pointer](conn))
-  doAssert 0 == conn.sctpSocket.usrsctp_setsockopt(IPPROTO_SCTP, SCTP_NODELAY,
-                                 addr nodelay, sizeof(nodelay).SockLen)
-  doAssert 0 == conn.sctpSocket.usrsctp_setsockopt(IPPROTO_SCTP, SCTP_RECVRCVINFO,
-                                 addr recvinfo, sizeof(recvinfo).SockLen)
+  if sctpSocket.isNil():
+    warn "usrsctp_accept fails", error = sctpStrerror(errno)
+    conn.state = SctpClosed
+  else:
+    conn.sctpSocket = sctpSocket
+    conn.state = SctpConnected
   conn.acceptEvent.fire()
 
 proc handleConnect(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
   # Callback procedure called when connecting
-  trace "Handle Connect"
   let
     conn = cast[SctpConn](data)
     events = usrsctp_get_events(sock)
 
-  trace "Handle Upcall", events, state = conn.state
-  if conn.state == Connecting:
+  trace "Handle Connect", events, state = conn.state
+  if conn.state == SctpConnecting:
     if bitand(events, SCTP_EVENT_ERROR) != 0:
       warn "Cannot connect", address = conn.address
-      conn.state = Closed
+      conn.state = SctpClosed
     elif bitand(events, SCTP_EVENT_WRITE) != 0:
-      conn.state = Connected
+      conn.state = SctpConnected
       doAssert 0 == usrsctp_set_upcall(conn.sctpSocket, recvCallback, data)
     conn.connectEvent.fire()
   else:
@@ -144,6 +138,15 @@ proc accept*(self: Sctp): Future[SctpConn] {.async.} =
   conn.readLoop = conn.readLoopProc()
   conn.acceptEvent.clear()
   await conn.acceptEvent.wait()
+
+  var nodelay: uint32 = 1
+  var recvinfo: uint32 = 1
+  doAssert 0 == conn.sctpSocket.usrsctp_set_non_blocking(1)
+  doAssert 0 == conn.sctpSocket.usrsctp_set_upcall(recvCallback, cast[pointer](conn))
+  doAssert 0 == conn.sctpSocket.usrsctp_setsockopt(IPPROTO_SCTP, SCTP_NODELAY,
+                                 addr nodelay, sizeof(nodelay).SockLen)
+  doAssert 0 == conn.sctpSocket.usrsctp_setsockopt(IPPROTO_SCTP, SCTP_RECVRCVINFO,
+                                 addr recvinfo, sizeof(recvinfo).SockLen)
   return conn
 
 proc listen*(self: Sctp, sctpPort: uint16 = 5000) =
@@ -176,7 +179,7 @@ proc connect*(self: Sctp,
 
   trace "Create Connection", address
   conn.sctpSocket = sctpSocket
-  conn.state = Connected
+  conn.state = SctpConnected
   var nodelay: uint32 = 1
   var recvinfo: uint32 = 1
   doAssert 0 == usrsctp_set_non_blocking(conn.sctpSocket, 1)
@@ -194,7 +197,7 @@ proc connect*(self: Sctp,
   let connErr = self.usrsctpAwait:
     conn.sctpSocket.usrsctp_connect(cast[ptr SockAddr](addr sconn), SockLen(sizeof(sconn)))
   doAssert 0 == connErr or errno == posix.EINPROGRESS, ($errno)
-  conn.state = Connecting
+  conn.state = SctpConnecting
   conn.connectEvent.clear()
   await conn.connectEvent.wait()
   # TODO: check connection state, if closed throw an exception

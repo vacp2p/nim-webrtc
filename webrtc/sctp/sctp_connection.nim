@@ -18,13 +18,11 @@ logScope:
   topics = "webrtc sctp_connection"
 
 # TODO: closing connection if usrsctp_recv / usrsctp_read fails
-proc sctpStrerror(error: int): cstring {.importc: "strerror", cdecl, header: "<string.h>".}
-
 type
   SctpState* = enum
-    Connecting
-    Connected
-    Closed
+    SctpConnecting
+    SctpConnected
+    SctpClosed
 
   SctpMessageParameters* = object
     protocolId*: uint32
@@ -129,7 +127,7 @@ proc toFlags(params: SctpMessageParameters): uint16 =
 
 proc new*(T: typedesc[SctpConn], conn: DtlsConn): T =
   T(conn: conn,
-    state: Connecting,
+    state: SctpConnecting,
     connectEvent: AsyncEvent(),
     acceptEvent: AsyncEvent(),
     dataRecv: newAsyncQueue[SctpMessage]()
