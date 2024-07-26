@@ -7,8 +7,8 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import tables, posix, strutils, sequtils
-import chronos, chronicles, stew/[ranges/ptr_arith, endians2]
+import tables, bitops, posix, strutils
+import chronos, chronicles
 import usrsctp
 import ../errors
 import ../dtls/[dtls_transport, dtls_connection]
@@ -139,12 +139,12 @@ proc readLoopProc(res: SctpConn) {.async.} =
 proc accept*(self: Sctp): Future[SctpConn] {.async.} =
   if not self.isServer:
     raise newException(WebRtcError, "SCTP - Not a server")
-  var res = SctpConn.new(await self.dtls.accept())
-  usrsctp_register_address(cast[pointer](res))
-  res.readLoop = res.readLoopProc()
-  res.acceptEvent.clear()
-  await res.acceptEvent.wait()
-  return res
+  var conn = SctpConn.new(await self.dtls.accept())
+  usrsctp_register_address(cast[pointer](conn))
+  conn.readLoop = conn.readLoopProc()
+  conn.acceptEvent.clear()
+  await conn.acceptEvent.wait()
+  return conn
 
 proc listen*(self: Sctp, sctpPort: uint16 = 5000) =
   if self.isServer:
