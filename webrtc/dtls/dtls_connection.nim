@@ -122,7 +122,6 @@ proc close*(self: DtlsConn) {.async: (raises: [CancelledError, WebRtcError]).} =
   if self.closed:
     debug "Try to close an already closed DtlsConn"
     return
-
   self.closed = true
   self.sendFuture = nil
   # TODO: proc mbedtls_ssl_close_notify => template mb_ssl_close_notify in nim-mbedtls

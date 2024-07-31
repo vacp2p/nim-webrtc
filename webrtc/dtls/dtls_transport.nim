@@ -34,8 +34,6 @@ logScope:
 # Multiple things here are unintuitive partly because of the callbacks
 # used by Mbed-TLS and that those callbacks cannot be async.
 
-# -- Dtls --
-
 type
   Dtls* = ref object of RootObj
     connections: Table[TransportAddress, DtlsConn]
@@ -75,12 +73,9 @@ proc stop*(self: Dtls) {.async.} =
   await allFutures(toSeq(self.connections.values()).mapIt(it.close()))
   self.started = false
 
-# -- Remote / Local certificate getter --
-
 proc localCertificate*(self: Dtls): seq[byte] =
+  ## Local certificate getter
   self.localCert
-
-# -- Dtls Accept / Connect procedures --
 
 proc cleanupDtlsConn(self: Dtls, conn: DtlsConn) {.async.} =
   # Waiting for a connection to be closed to remove it from the table
@@ -149,10 +144,6 @@ proc connect*(self: Dtls, raddr: TransportAddress): Future[DtlsConn] {.async.} =
   res.ctx.srvcert = res.ctx.ctr_drbg.generateCertificate(res.ctx.pkey)
   res.localCert = newSeq[byte](res.ctx.srvcert.raw.len)
   copyMem(addr res.localCert[0], res.ctx.srvcert.raw.p, res.ctx.srvcert.raw.len)
-
-  mb_ctr_drbg_init(res.ctx.ctr_drbg)
-  mb_entropy_init(res.ctx.entropy)
-  mb_ctr_drbg_seed(res.ctx.ctr_drbg, mbedtls_entropy_func, res.ctx.entropy, nil, 0)
 
   mb_ssl_config_defaults(res.ctx.config,
                          MBEDTLS_SSL_IS_CLIENT,
