@@ -28,10 +28,6 @@ import mbedtls/timing
 logScope:
   topics = "webrtc dtls_conn"
 
-# -- DtlsConn --
-# A Dtls connection to a specific IP address recovered by the receiving part of
-# the Udp "connection"
-
 type
   MbedTLSCtx* = object
     ssl*: mbedtls_ssl_context
@@ -46,6 +42,8 @@ type
     entropy*: mbedtls_entropy_context
 
   DtlsConn* = ref object
+    # DtlsConn is a Dtls connection receiving and sending data using
+    # the underlying Stun Connection
     conn*: StunConn # The wrapper protocol Stun Connection
     laddr: TransportAddress # Local address
     raddr*: TransportAddress # Remote address
