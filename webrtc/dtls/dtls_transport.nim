@@ -7,7 +7,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import times, deques, tables, sequtils
+import deques, tables, sequtils
 import chronos, chronicles
 import ./[dtls_utils, dtls_connection], ../errors,
        ../stun/[stun_connection, stun_transport]
@@ -86,37 +86,8 @@ proc accept*(self: Dtls): Future[DtlsConn] {.async.} =
   ## Accept a Dtls Connection
   ##
   var res = DtlsConn.new(await self.transport.accept(), self.laddr)
+  res.acceptInit(self.ctr_drbg, self.serverPrivKey, self.serverCert, self.localCert)
 
-  mb_ssl_init(res.ctx.ssl)
-  mb_ssl_config_init(res.ctx.config)
-  mb_ssl_cookie_init(res.ctx.cookie)
-  mb_ssl_cache_init(res.ctx.cache)
-
-  res.ctx.ctr_drbg = self.ctr_drbg
-  res.ctx.entropy = self.entropy
-
-  res.ctx.pkey = self.serverPrivKey
-  res.ctx.srvcert = self.serverCert
-  res.localCert = self.localCert
-
-  mb_ssl_config_defaults(
-    res.ctx.config,
-    MBEDTLS_SSL_IS_SERVER,
-    MBEDTLS_SSL_TRANSPORT_DATAGRAM,
-    MBEDTLS_SSL_PRESET_DEFAULT
-  )
-  mb_ssl_conf_rng(res.ctx.config, mbedtls_ctr_drbg_random, res.ctx.ctr_drbg)
-  mb_ssl_conf_read_timeout(res.ctx.config, 10000) # in milliseconds
-  mb_ssl_conf_ca_chain(res.ctx.config, res.ctx.srvcert.next, nil)
-  mb_ssl_conf_own_cert(res.ctx.config, res.ctx.srvcert, res.ctx.pkey)
-  mb_ssl_cookie_setup(res.ctx.cookie, mbedtls_ctr_drbg_random, res.ctx.ctr_drbg)
-  mb_ssl_conf_dtls_cookies(res.ctx.config, addr res.ctx.cookie)
-  mb_ssl_set_timer_cb(res.ctx.ssl, res.ctx.timer)
-  mb_ssl_setup(res.ctx.ssl, res.ctx.config)
-  mb_ssl_session_reset(res.ctx.ssl)
-  mb_ssl_set_verify(res.ctx.ssl, verify, res)
-  mb_ssl_conf_authmode(res.ctx.config, MBEDTLS_SSL_VERIFY_OPTIONAL)
-  mb_ssl_set_bio(res.ctx.ssl, cast[pointer](res), dtlsSend, dtlsRecv, nil)
   while true:
     try:
       self.connections[res.raddr] = res
@@ -133,30 +104,7 @@ proc accept*(self: Dtls): Future[DtlsConn] {.async.} =
 proc connect*(self: Dtls, raddr: TransportAddress): Future[DtlsConn] {.async.} =
   ## Connect to a remote address, creating a Dtls Connection
   var res = DtlsConn.new(await self.transport.connect(raddr), self.laddr)
-
-  mb_ssl_init(res.ctx.ssl)
-  mb_ssl_config_init(res.ctx.config)
-
-  res.ctx.ctr_drbg = self.ctr_drbg
-  res.ctx.entropy = self.entropy
-
-  res.ctx.pkey = res.ctx.ctr_drbg.generateKey()
-  res.ctx.srvcert = res.ctx.ctr_drbg.generateCertificate(res.ctx.pkey)
-  res.localCert = newSeq[byte](res.ctx.srvcert.raw.len)
-  copyMem(addr res.localCert[0], res.ctx.srvcert.raw.p, res.ctx.srvcert.raw.len)
-
-  mb_ssl_config_defaults(res.ctx.config,
-                         MBEDTLS_SSL_IS_CLIENT,
-                         MBEDTLS_SSL_TRANSPORT_DATAGRAM,
-                         MBEDTLS_SSL_PRESET_DEFAULT)
-  mb_ssl_conf_rng(res.ctx.config, mbedtls_ctr_drbg_random, res.ctx.ctr_drbg)
-  mb_ssl_conf_read_timeout(res.ctx.config, 10000) # in milliseconds
-  mb_ssl_conf_ca_chain(res.ctx.config, res.ctx.srvcert.next, nil)
-  mb_ssl_set_timer_cb(res.ctx.ssl, res.ctx.timer)
-  mb_ssl_setup(res.ctx.ssl, res.ctx.config)
-  mb_ssl_set_verify(res.ctx.ssl, verify, res)
-  mb_ssl_conf_authmode(res.ctx.config, MBEDTLS_SSL_VERIFY_OPTIONAL)
-  mb_ssl_set_bio(res.ctx.ssl, cast[pointer](res), dtlsSend, dtlsRecv, nil)
+  res.connectInit(self.ctr_drbg)
 
   try:
     self.connections[raddr] = res
