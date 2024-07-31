@@ -32,7 +32,7 @@ logScope:
 
 # Implementation of a DTLS client and a DTLS Server by using the Mbed-TLS library.
 # Multiple things here are unintuitive partly because of the callbacks
-# used by Mbed-TLS and that those callbacks cannot be async.
+# used by Mbed-TLS which cannot be async.
 
 type
   Dtls* = ref object of RootObj
