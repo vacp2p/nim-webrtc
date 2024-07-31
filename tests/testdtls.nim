@@ -20,7 +20,7 @@ suite "DTLS":
   teardown:
     checkLeaks()
 
-  asyncTest "Simple Test":
+  asyncTest "Two DTLS nodes connecting to each other, then sending/receiving data":
     let
       udp1 = UdpTransport.new(initTAddress("127.0.0.1:4444"))
       udp2 = UdpTransport.new(initTAddress("127.0.0.1:5555"))
