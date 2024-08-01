@@ -8,6 +8,7 @@
 # those terms.
 
 import std/times
+import ../errors
 
 import mbedtls/pk
 import mbedtls/rsa
@@ -62,9 +63,12 @@ template generateKey*(random: mbedtls_ctr_drbg_context): mbedtls_pk_context =
 template generateCertificate*(random: mbedtls_ctr_drbg_context,
                               issuer_key: mbedtls_pk_context): mbedtls_x509_crt =
   let
-    # To be honest, I have no clue what to put here as a name
     name = "C=FR,O=Status,CN=webrtc"
-    time_format = initTimeFormat("YYYYMMddHHmmss")
+    time_format =
+      try:
+        initTimeFormat("YYYYMMddHHmmss")
+      except TimeFormatParseError as exc:
+        raise newException(WebRtcError, "DTLS - " & exc.msg, exc)
     time_from = times.now().format(time_format)
     time_to = (times.now() + times.years(1)).format(time_format)
 
@@ -86,8 +90,8 @@ template generateCertificate*(random: mbedtls_ctr_drbg_context,
   let buf =
     try:
       mb_x509write_crt_pem(write_cert, 2048, mbedtls_ctr_drbg_random, random)
-    except MbedTLSError as e:
-      raise e
+    except MbedTLSError as exc:
+      raise newException(WebRtcError, "DTLS - " & exc.msg, exc)
   var res: mbedtls_x509_crt
   mb_x509_crt_parse(res, buf)
   res

@@ -131,46 +131,52 @@ proc acceptInit*(
     srvcert: mbedtls_x509_crt,
     localCert: seq[byte]
 ) =
-  self.ctx.ctr_drbg = ctr_drbg
-  self.ctx.pkey = pkey
-  self.ctx.srvcert = srvcert
-  self.localCert = localCert
+  try:
+    self.ctx.ctr_drbg = ctr_drbg
+    self.ctx.pkey = pkey
+    self.ctx.srvcert = srvcert
+    self.localCert = localCert
 
-  self.dtlsConnInit()
-  mb_ssl_cookie_init(self.ctx.cookie)
-  mb_ssl_cache_init(self.ctx.cache)
-  mb_ssl_config_defaults(
-    self.ctx.config,
-    MBEDTLS_SSL_IS_SERVER,
-    MBEDTLS_SSL_TRANSPORT_DATAGRAM,
-    MBEDTLS_SSL_PRESET_DEFAULT
-  )
-  mb_ssl_conf_own_cert(self.ctx.config, self.ctx.srvcert, self.ctx.pkey)
-  mb_ssl_cookie_setup(self.ctx.cookie, mbedtls_ctr_drbg_random, self.ctx.ctr_drbg)
-  mb_ssl_conf_dtls_cookies(self.ctx.config, addr self.ctx.cookie)
-  mb_ssl_setup(self.ctx.ssl, self.ctx.config)
-  mb_ssl_session_reset(self.ctx.ssl)
-  mb_ssl_conf_authmode(self.ctx.config, MBEDTLS_SSL_VERIFY_OPTIONAL)
+    self.dtlsConnInit()
+    mb_ssl_cookie_init(self.ctx.cookie)
+    mb_ssl_cache_init(self.ctx.cache)
+    mb_ssl_config_defaults(
+      self.ctx.config,
+      MBEDTLS_SSL_IS_SERVER,
+      MBEDTLS_SSL_TRANSPORT_DATAGRAM,
+      MBEDTLS_SSL_PRESET_DEFAULT
+    )
+    mb_ssl_conf_own_cert(self.ctx.config, self.ctx.srvcert, self.ctx.pkey)
+    mb_ssl_cookie_setup(self.ctx.cookie, mbedtls_ctr_drbg_random, self.ctx.ctr_drbg)
+    mb_ssl_conf_dtls_cookies(self.ctx.config, addr self.ctx.cookie)
+    mb_ssl_setup(self.ctx.ssl, self.ctx.config)
+    mb_ssl_session_reset(self.ctx.ssl)
+    mb_ssl_conf_authmode(self.ctx.config, MBEDTLS_SSL_VERIFY_OPTIONAL)
+  except MbedTLSError as exc:
+    raise newException(WebRtcError, "DTLS - Accept initialization: " & exc.msg, exc)
 
 proc connectInit*(
     self: DtlsConn,
     ctr_drbg: mbedtls_ctr_drbg_context
 ) =
-  self.ctx.ctr_drbg = ctr_drbg
-  self.ctx.pkey = self.ctx.ctr_drbg.generateKey()
-  self.ctx.srvcert = self.ctx.ctr_drbg.generateCertificate(self.ctx.pkey)
-  self.localCert = newSeq[byte](self.ctx.srvcert.raw.len)
-  copyMem(addr self.localCert[0], self.ctx.srvcert.raw.p, self.ctx.srvcert.raw.len)
+  try:
+    self.ctx.ctr_drbg = ctr_drbg
+    self.ctx.pkey = self.ctx.ctr_drbg.generateKey()
+    self.ctx.srvcert = self.ctx.ctr_drbg.generateCertificate(self.ctx.pkey)
+    self.localCert = newSeq[byte](self.ctx.srvcert.raw.len)
+    copyMem(addr self.localCert[0], self.ctx.srvcert.raw.p, self.ctx.srvcert.raw.len)
 
-  self.dtlsConnInit()
-  mb_ssl_config_defaults(
-    self.ctx.config,
-    MBEDTLS_SSL_IS_CLIENT,
-    MBEDTLS_SSL_TRANSPORT_DATAGRAM,
-    MBEDTLS_SSL_PRESET_DEFAULT
-  )
-  mb_ssl_setup(self.ctx.ssl, self.ctx.config)
-  mb_ssl_conf_authmode(self.ctx.config, MBEDTLS_SSL_VERIFY_OPTIONAL)
+    self.dtlsConnInit()
+    mb_ssl_config_defaults(
+      self.ctx.config,
+      MBEDTLS_SSL_IS_CLIENT,
+      MBEDTLS_SSL_TRANSPORT_DATAGRAM,
+      MBEDTLS_SSL_PRESET_DEFAULT
+    )
+    mb_ssl_setup(self.ctx.ssl, self.ctx.config)
+    mb_ssl_conf_authmode(self.ctx.config, MBEDTLS_SSL_VERIFY_OPTIONAL)
+  except MbedTLSError as exc:
+    raise newException(WebRtcError, "DTLS - Connect initialization: " & exc.msg, exc)
 
 proc join*(self: DtlsConn) {.async: (raises: [CancelledError]).} =
   ## Wait for the Dtls Connection to be closed

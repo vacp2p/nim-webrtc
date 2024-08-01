@@ -65,7 +65,7 @@ proc new*(T: type Dtls, transport: Stun): T =
   copyMem(addr self.localCert[0], self.serverCert.raw.p, self.serverCert.raw.len)
   return self
 
-proc stop*(self: Dtls) {.async.} =
+proc stop*(self: Dtls) {.async: (raises: [CancelledError, WebRtcError]).} =
   if not self.started:
     warn "Already stopped"
     return
@@ -77,12 +77,12 @@ proc localCertificate*(self: Dtls): seq[byte] =
   ## Local certificate getter
   self.localCert
 
-proc cleanupDtlsConn(self: Dtls, conn: DtlsConn) {.async.} =
+proc cleanupDtlsConn(self: Dtls, conn: DtlsConn) {.async: (raises: [CancelledError]).} =
   # Waiting for a connection to be closed to remove it from the table
   await conn.join()
   self.connections.del(conn.raddr)
 
-proc accept*(self: Dtls): Future[DtlsConn] {.async.} =
+proc accept*(self: Dtls): Future[DtlsConn] {.async: (raises: [CancelledError, WebRtcError]).} =
   ## Accept a Dtls Connection
   ##
   var res = DtlsConn.new(await self.transport.accept(), self.laddr)
@@ -101,7 +101,10 @@ proc accept*(self: Dtls): Future[DtlsConn] {.async.} =
       res.conn = await self.transport.accept()
   return res
 
-proc connect*(self: Dtls, raddr: TransportAddress): Future[DtlsConn] {.async.} =
+proc connect*(
+    self: Dtls,
+    raddr: TransportAddress
+): Future[DtlsConn] {.async: (raises: [CancelledError, WebRtcError]).} =
   ## Connect to a remote address, creating a Dtls Connection
   var res = DtlsConn.new(await self.transport.connect(raddr), self.laddr)
   res.connectInit(self.ctr_drbg)
