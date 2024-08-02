@@ -85,12 +85,14 @@ proc cleanupDtlsConn(self: Dtls, conn: DtlsConn) {.async: (raises: [CancelledErr
 proc accept*(self: Dtls): Future[DtlsConn] {.async: (raises: [CancelledError, WebRtcError]).} =
   ## Accept a Dtls Connection
   ##
-  var res = DtlsConn.new(await self.transport.accept(), self.laddr)
-  res.acceptInit(self.ctr_drbg, self.serverPrivKey, self.serverCert, self.localCert)
+  var res: DtlsConn
 
   while true:
-    if res.raddr.family == AddressFamily.IPv4 or res.raddr.family == AddressFamily.IPv6:
+    let stunConn = await self.transport.accept()
+    if stunConn.raddr.family == AddressFamily.IPv4 or stunConn.raddr.family == AddressFamily.IPv6:
       try:
+        res = DtlsConn.new(stunConn, self.laddr)
+        res.acceptInit(self.ctr_drbg, self.serverPrivKey, self.serverCert, self.localCert)
         self.connections[res.raddr] = res
         await res.dtlsHandshake(true)
         asyncSpawn self.cleanupDtlsConn(res)
@@ -99,7 +101,6 @@ proc accept*(self: Dtls): Future[DtlsConn] {.async: (raises: [CancelledError, We
         trace "Handshake fails, try accept another connection",
               remoteAddress = res.raddr, error = exc.msg
     self.connections.del(res.raddr)
-    res = DtlsConn.new(await self.transport.accept(), self.laddr)
   return res
 
 proc connect*(
