@@ -197,8 +197,6 @@ proc dtlsHandshake*(
             mb_ssl_set_client_transport_id(self.ctx.ssl, self.raddr.address_v4)
           of AddressFamily.IPv6:
             mb_ssl_set_client_transport_id(self.ctx.ssl, self.raddr.address_v6)
-          else:
-            raise newException(WebRtcError, "DTLS - Remote address isn't an IP address")
         let (data, _) = await self.conn.read()
         self.dataRecv = data
       self.sendFuture = nil

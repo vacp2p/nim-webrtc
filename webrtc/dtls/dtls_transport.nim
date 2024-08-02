@@ -89,16 +89,17 @@ proc accept*(self: Dtls): Future[DtlsConn] {.async: (raises: [CancelledError, We
   res.acceptInit(self.ctr_drbg, self.serverPrivKey, self.serverCert, self.localCert)
 
   while true:
-    try:
-      self.connections[res.raddr] = res
-      await res.dtlsHandshake(true)
-      asyncSpawn self.cleanupDtlsConn(res)
-      break
-    except WebRtcError as exc:
-      trace "Handshake fails, try accept another connection",
-            remoteAddress = res.raddr, error = exc.msg
-      self.connections.del(res.raddr)
-      res.conn = await self.transport.accept()
+    if res.raddr.family == AddressFamily.IPv4 or res.raddr.family == AddressFamily.IPv6:
+      try:
+        self.connections[res.raddr] = res
+        await res.dtlsHandshake(true)
+        asyncSpawn self.cleanupDtlsConn(res)
+        break
+      except WebRtcError as exc:
+        trace "Handshake fails, try accept another connection",
+              remoteAddress = res.raddr, error = exc.msg
+    self.connections.del(res.raddr)
+    res = DtlsConn.new(await self.transport.accept(), self.laddr)
   return res
 
 proc connect*(
@@ -106,6 +107,9 @@ proc connect*(
     raddr: TransportAddress
 ): Future[DtlsConn] {.async: (raises: [CancelledError, WebRtcError]).} =
   ## Connect to a remote address, creating a Dtls Connection
+  ##
+  if raddr.family != AddressFamily.IPv4 and raddr.family != AddressFamily.IPv6:
+    raise newException(WebRtcError, "DTLS - Can only connect to IP address")
   var res = DtlsConn.new(await self.transport.connect(raddr), self.laddr)
   res.connectInit(self.ctr_drbg)
 
