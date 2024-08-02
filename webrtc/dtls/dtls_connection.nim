@@ -16,7 +16,6 @@ import mbedtls/ssl_cookie
 import mbedtls/ssl_cache
 import mbedtls/pk
 import mbedtls/md
-import mbedtls/entropy
 import mbedtls/ctr_drbg
 import mbedtls/rsa
 import mbedtls/x509
@@ -38,9 +37,7 @@ type
     timer: mbedtls_timing_delay_context
     pkey: mbedtls_pk_context
     srvcert: mbedtls_x509_crt
-
     ctr_drbg: mbedtls_ctr_drbg_context
-    entropy: mbedtls_entropy_context
 
   DtlsConn* = ref object
     # DtlsConn is a Dtls connection receiving and sending data using
