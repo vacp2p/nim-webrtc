@@ -43,3 +43,36 @@ suite "DTLS":
     await allFutures(dtls1.stop(), dtls2.stop())
     await allFutures(stun1.stop(), stun2.stop())
     await allFutures(udp1.close(), udp2.close())
+
+  asyncTest "Two DTLS nodes connecting to the same DTLS server, sending/receiving data":
+    let
+      udp1 = UdpTransport.new(initTAddress("127.0.0.1:4444"))
+      udp2 = UdpTransport.new(initTAddress("127.0.0.1:5555"))
+      udp3 = UdpTransport.new(initTAddress("127.0.0.1:6666"))
+      stun1 = Stun.new(udp1)
+      stun2 = Stun.new(udp2)
+      stun3 = Stun.new(udp3)
+      dtls1 = Dtls.new(stun1)
+      dtls2 = Dtls.new(stun2)
+      dtls3 = Dtls.new(stun3)
+      servConn1Fut = dtls1.accept()
+      servConn2Fut = dtls1.accept()
+      clientConn1 = await dtls2.connect(dtls1.laddr)
+      clientConn2 = await dtls3.connect(dtls1.laddr)
+      servConn1 = await servConn1Fut
+      servConn2 = await servConn2Fut
+
+    await servConn1.write(@[1'u8, 2, 3, 4])
+    await servConn2.write(@[5'u8, 6, 7, 8])
+    await clientConn1.write(@[9'u8, 10, 11, 12])
+    await clientConn2.write(@[13'u8, 14, 15, 16])
+    check:
+      (await clientConn1.read()) == @[1'u8, 2, 3, 4]
+      (await clientConn2.read()) == @[5'u8, 6, 7, 8]
+      (await servConn1.read()) == @[9'u8, 10, 11, 12]
+      (await servConn2.read()) == @[13'u8, 14, 15, 16]
+    await allFutures(servConn1.close(), servConn2.close())
+    await allFutures(clientConn1.close(), clientConn2.close())
+    await allFutures(dtls1.stop(), dtls2.stop(), dtls3.stop())
+    await allFutures(stun1.stop(), stun2.stop(), stun3.stop())
+    await allFutures(udp1.close(), udp2.close(), udp3.close())
