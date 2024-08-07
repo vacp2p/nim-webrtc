@@ -58,8 +58,8 @@ type
 
     # Local and Remote certificate, needed by wrapped protocol DataChannel
     # and by libp2p
-    localCert*: seq[byte]
-    remoteCert*: seq[byte]
+    localCert: seq[byte]
+    remoteCert: seq[byte]
 
     # Mbed-TLS contexts
     ctx: MbedTLSCtx
