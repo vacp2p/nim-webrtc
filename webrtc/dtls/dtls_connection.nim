@@ -28,6 +28,8 @@ import mbedtls/timing
 logScope:
   topics = "webrtc dtls_conn"
 
+const DtlsConnTracker* = "webrtc.dtls.conn"
+
 type
   MbedTLSCtx = object
     ssl: mbedtls_ssl_context
@@ -217,6 +219,7 @@ proc dtlsHandshake*(
   except MbedTLSError as exc:
     trace "Dtls handshake error", errorMsg = exc.msg
     raise newException(WebRtcError, "DTLS - Handshake error", exc)
+  trackCounter(DtlsConnTracker)
 
 proc close*(self: DtlsConn) {.async: (raises: [CancelledError, WebRtcError]).} =
   ## Close a Dtls Connection
@@ -229,6 +232,7 @@ proc close*(self: DtlsConn) {.async: (raises: [CancelledError, WebRtcError]).} =
   let x = mbedtls_ssl_close_notify(addr self.ctx.ssl)
   if not self.sendFuture.isNil():
     await self.sendFuture
+  untrackCounter(DtlsConnTracker)
   self.closeEvent.fire()
 
 proc write*(self: DtlsConn, msg: seq[byte]) {.async.} =

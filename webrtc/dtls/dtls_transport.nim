@@ -34,6 +34,8 @@ logScope:
 # Multiple things here are unintuitive partly because of the callbacks
 # used by Mbed-TLS which cannot be async.
 
+const DtlsTransportTracker* = "webrtc.dtls.transport"
+
 type
   DtlsConnAndCleanup = object
     connection: DtlsConn
@@ -66,6 +68,7 @@ proc new*(T: type Dtls, transport: Stun): T =
   self.serverCert = self.ctr_drbg.generateCertificate(self.serverPrivKey)
   self.localCert = newSeq[byte](self.serverCert.raw.len)
   copyMem(addr self.localCert[0], self.serverCert.raw.p, self.serverCert.raw.len)
+  trackCounter(DtlsTransportTracker)
   return self
 
 proc stop*(self: Dtls) {.async: (raises: [CancelledError]).} =
@@ -78,6 +81,7 @@ proc stop*(self: Dtls) {.async: (raises: [CancelledError]).} =
   self.started = false
   await allFutures(toSeq(self.connections.values()).mapIt(it.connection.close()))
   await allFutures(toSeq(self.connections.values()).mapIt(it.cleanup))
+  untrackCounter(DtlsTransportTracker)
 
 proc localCertificate*(self: Dtls): seq[byte] =
   ## Local certificate getter
