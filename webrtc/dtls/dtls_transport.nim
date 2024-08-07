@@ -93,6 +93,8 @@ proc cleanupDtlsConn(self: Dtls, conn: DtlsConn) {.async: (raises: []).} =
 proc accept*(self: Dtls): Future[DtlsConn] {.async: (raises: [CancelledError, WebRtcError]).} =
   ## Accept a Dtls Connection
   ##
+  if not self.started:
+    raise newException(WebRtcError, "DTLS - Dtls transport not started")
   var res: DtlsConn
 
   while true:
@@ -119,6 +121,8 @@ proc connect*(
 ): Future[DtlsConn] {.async: (raises: [CancelledError, WebRtcError]).} =
   ## Connect to a remote address, creating a Dtls Connection
   ##
+  if not self.started:
+    raise newException(WebRtcError, "DTLS - Dtls transport not started")
   if raddr.family != AddressFamily.IPv4 and raddr.family != AddressFamily.IPv6:
     raise newException(WebRtcError, "DTLS - Can only connect to IP address")
   var res = DtlsConn.new(await self.transport.connect(raddr), self.laddr)
