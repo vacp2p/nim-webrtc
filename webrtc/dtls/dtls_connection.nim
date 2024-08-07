@@ -226,7 +226,6 @@ proc close*(self: DtlsConn) {.async: (raises: [CancelledError, WebRtcError]).} =
     return
   self.closed = true
   self.sendFuture = nil
-  # TODO: proc mbedtls_ssl_close_notify => template mb_ssl_close_notify in nim-mbedtls
   let x = mbedtls_ssl_close_notify(addr self.ctx.ssl)
   if not self.sendFuture.isNil():
     await self.sendFuture
@@ -260,8 +259,6 @@ proc read*(self: DtlsConn): Future[seq[byte]] {.async.} =
   while true:
     let (data, _) = await self.conn.read()
     self.dataRecv = data
-    # TODO: Find a clear way to use the template `mb_ssl_read` without
-    #       messing up things with exception
     let length = mbedtls_ssl_read(addr self.ctx.ssl, cast[ptr byte](addr res[0]), res.len().uint)
     if length == MBEDTLS_ERR_SSL_WANT_READ:
       continue
