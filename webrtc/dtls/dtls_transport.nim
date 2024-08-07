@@ -68,14 +68,16 @@ proc new*(T: type Dtls, transport: Stun): T =
   copyMem(addr self.localCert[0], self.serverCert.raw.p, self.serverCert.raw.len)
   return self
 
-proc stop*(self: Dtls) {.async: (raises: [CancelledError, WebRtcError]).} =
+proc stop*(self: Dtls) {.async: (raises: [CancelledError]).} =
+  ## Stop the Dtls transport. Stop every opened connections.
+  ##
   if not self.started:
     warn "Already stopped"
     return
 
+  self.started = false
   await allFutures(toSeq(self.connections.values()).mapIt(it.connection.close()))
   await allFutures(toSeq(self.connections.values()).mapIt(it.cleanup))
-  self.started = false
 
 proc localCertificate*(self: Dtls): seq[byte] =
   ## Local certificate getter
