@@ -60,7 +60,7 @@ type
     remoteCert*: seq[byte]
 
     # Mbed-TLS contexts
-    ctx*: MbedTLSCtx
+    ctx: MbedTLSCtx
 
 proc verify(ctx: pointer, pcert: ptr mbedtls_x509_crt,
             state: cint, pflags: ptr uint32): cint {.cdecl.} =
