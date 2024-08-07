@@ -35,8 +35,11 @@ logScope:
 # used by Mbed-TLS which cannot be async.
 
 type
+  DtlsConnAndCleanup = object
+    connection: DtlsConn
+    cleanup: Future[void].Raising([])
   Dtls* = ref object of RootObj
-    connections: Table[TransportAddress, DtlsConn]
+    connections: Table[TransportAddress, DtlsConnAndCleanup]
     transport: Stun
     laddr*: TransportAddress
     started: bool
@@ -49,7 +52,7 @@ type
 
 proc new*(T: type Dtls, transport: Stun): T =
   var self = T(
-    connections: initTable[TransportAddress, DtlsConn](),
+    connections: initTable[TransportAddress, DtlsConnAndCleanup](),
     transport: transport,
     laddr: transport.laddr,
     started: true
@@ -70,16 +73,21 @@ proc stop*(self: Dtls) {.async: (raises: [CancelledError, WebRtcError]).} =
     warn "Already stopped"
     return
 
-  await allFutures(toSeq(self.connections.values()).mapIt(it.close()))
+  await allFutures(toSeq(self.connections.values()).mapIt(it.connection.close()))
+  await allFutures(toSeq(self.connections.values()).mapIt(it.cleanup))
   self.started = false
 
 proc localCertificate*(self: Dtls): seq[byte] =
   ## Local certificate getter
   self.localCert
 
-proc cleanupDtlsConn(self: Dtls, conn: DtlsConn) {.async: (raises: [CancelledError]).} =
+proc cleanupDtlsConn(self: Dtls, conn: DtlsConn) {.async: (raises: []).} =
   # Waiting for a connection to be closed to remove it from the table
-  await conn.join()
+  try:
+    await conn.join()
+  except CancelledError as exc:
+    discard
+
   self.connections.del(conn.raddr)
 
 proc accept*(self: Dtls): Future[DtlsConn] {.async: (raises: [CancelledError, WebRtcError]).} =
@@ -93,9 +101,11 @@ proc accept*(self: Dtls): Future[DtlsConn] {.async: (raises: [CancelledError, We
       try:
         res = DtlsConn.new(stunConn, self.laddr)
         res.acceptInit(self.ctr_drbg, self.serverPrivKey, self.serverCert, self.localCert)
-        self.connections[res.raddr] = res
         await res.dtlsHandshake(true)
-        asyncSpawn self.cleanupDtlsConn(res)
+        self.connections[res.raddr] = DtlsConnAndCleanup(
+          connection: res,
+          cleanup: self.cleanupDtlsConn(res)
+        )
         break
       except WebRtcError as exc:
         trace "Handshake fails, try accept another connection",
@@ -115,9 +125,11 @@ proc connect*(
   res.connectInit(self.ctr_drbg)
 
   try:
-    self.connections[raddr] = res
     await res.dtlsHandshake(false)
-    asyncSpawn self.cleanupDtlsConn(res)
+    self.connections[res.raddr] = DtlsConnAndCleanup(
+      connection: res,
+      cleanup: self.cleanupDtlsConn(res)
+    )
   except WebRtcError as exc:
     trace "Handshake fails", remoteAddress = raddr, error = exc.msg
     self.connections.del(raddr)
