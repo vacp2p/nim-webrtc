@@ -252,6 +252,12 @@ proc write*(self: DtlsConn, msg: seq[byte]) {.async.} =
     raise exc
 
 proc read*(self: DtlsConn): Future[seq[byte]] {.async.} =
+  ## Read the next received message by StunConn.
+  ## Uncypher it using mbedtls_ssl_read.
+  ##
+  # First we read the StunConn using the asynchronous `StunConn.read` procedure.
+  # When we received data, we stored it in `DtlsConn.dataRecv` and call `dtlsRecv`
+  # callback using mbedtls in order to decypher it.
   if self.closed:
     debug "Try to read on an already closed DtlsConn"
     return
@@ -267,10 +273,12 @@ proc read*(self: DtlsConn): Future[seq[byte]] {.async.} =
     res.setLen(length)
     return res
 
-# -- Remote / Local certificate getter --
-
 proc remoteCertificate*(conn: DtlsConn): seq[byte] =
+  ## Get the remote certificate
+  ##
   conn.remoteCert
 
 proc localCertificate*(conn: DtlsConn): seq[byte] =
+  ## Get the local certificate
+  ##
   conn.localCert
