@@ -7,7 +7,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import tables
+import tables, sequtils
 import chronos, chronicles, bearssl
 import stun_connection, stun_message, ../udp_transport
 
@@ -22,8 +22,9 @@ type
   Stun* = ref object
     connections: Table[TransportAddress, StunConn]
     pendingConn: AsyncQueue[StunConn]
-    readingLoop: Future[void]
+    readingLoop: Future[void].Raising([CancelledError])
     udp: UdpTransport
+    laddr*: TransportAddress
 
     usernameProvider: StunUsernameProvider
     usernameChecker: StunUsernameChecker
@@ -84,12 +85,14 @@ proc stunReadLoop(self: Stun) {.async: (raises: [CancelledError]).} =
     else:
       await stunConn.dataRecv.addLast(buf)
 
-proc stop(self: Stun) =
+proc stop*(self: Stun) {.async: (raises: []).} =
   ## Stop the Stun transport and close all the connections
   ##
-  for conn in self.connections.values():
-    conn.close()
-  self.readingLoop.cancelSoon()
+  try:
+    await allFutures(toSeq(self.connections.values()).mapIt(it.close()))
+  except CancelledError as exc:
+    discard
+  await self.readingLoop.cancelAndWait()
   untrackCounter(StunTransportTracker)
 
 proc defaultUsernameProvider(): string = ""
@@ -108,12 +111,13 @@ proc new*(
   ##
   var self = T(
     udp: udp,
+    laddr: udp.laddr,
     usernameProvider: usernameProvider,
     usernameChecker: usernameChecker,
     passwordProvider: passwordProvider,
     rng: rng
   )
-  self.readingLoop = stunReadLoop()
+  self.readingLoop = self.stunReadLoop()
   self.pendingConn = newAsyncQueue[StunConn](StunMaxPendingConnections)
   trackCounter(StunTransportTracker)
   return self

@@ -55,7 +55,7 @@ suite "Stun message encoding/decoding":
       decoded == msg
       messageIntegrity.attributeType == AttrMessageIntegrity.uint16
       fingerprint.attributeType == AttrFingerprint.uint16
-    conn.close()
+    await conn.close()
     await udp.close()
 
   asyncTest "Get BindingResponse from BindingRequest + encode & decode":
@@ -82,7 +82,7 @@ suite "Stun message encoding/decoding":
       bindingResponse == decoded
       messageIntegrity.attributeType == AttrMessageIntegrity.uint16
       fingerprint.attributeType == AttrFingerprint.uint16
-    conn.close()
+    await conn.close()
     await udp.close()
 
 suite "Stun checkForError":
@@ -114,7 +114,7 @@ suite "Stun checkForError":
 
     check:
       errorMissUsername.getAttribute(ErrorCode).get().getErrorCode() == ECBadRequest
-    conn.close()
+    await conn.close()
     await udp.close()
 
   asyncTest "checkForError: UsernameChecker returns false":
@@ -136,5 +136,5 @@ suite "Stun checkForError":
 
     check:
       error.getAttribute(ErrorCode).get().getErrorCode() == ECUnauthorized
-    conn.close()
+    await conn.close()
     await udp.close()
