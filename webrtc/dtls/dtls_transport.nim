@@ -82,6 +82,9 @@ proc localCertificate*(self: Dtls): seq[byte] =
   ## Local certificate getter
   self.localCert
 
+proc localAddress*(self: Dtls): TransportAddress =
+  self.laddr
+
 proc cleanupDtlsConn(self: Dtls, conn: DtlsConn) {.async: (raises: []).} =
   # Waiting for a connection to be closed to remove it from the table
   try:
@@ -101,22 +104,22 @@ proc accept*(
   var res: DtlsConn
 
   while true:
-    let stunConn = await self.transport.accept()
-    if stunConn.raddr.family == AddressFamily.IPv4 or
-        stunConn.raddr.family == AddressFamily.IPv6:
+    let
+      stunConn = await self.transport.accept()
+      raddr = stunConn.raddr
+    if raddr.family == AddressFamily.IPv4 or raddr.family == AddressFamily.IPv6:
       try:
         res = DtlsConn.new(stunConn)
         res.acceptInit(
           self.ctr_drbg, self.serverPrivKey, self.serverCert, self.localCert
         )
         await res.dtlsHandshake(true)
-        self.connections[res.raddr] =
+        self.connections[raddr] =
           DtlsConnAndCleanup(connection: res, cleanup: self.cleanupDtlsConn(res))
         break
       except WebRtcError as exc:
-        trace "Handshake fails, try accept another connection",
-          remoteAddress = res.raddr, error = exc.msg
-    self.connections.del(res.raddr)
+        trace "Handshake fails, try accept another connection", raddr, error = exc.msg
+    self.connections.del(raddr)
   return res
 
 proc connect*(
@@ -133,10 +136,10 @@ proc connect*(
 
   try:
     await res.dtlsHandshake(false)
-    self.connections[res.raddr] =
+    self.connections[raddr] =
       DtlsConnAndCleanup(connection: res, cleanup: self.cleanupDtlsConn(res))
   except WebRtcError as exc:
-    trace "Handshake fails", remoteAddress = raddr, error = exc.msg
+    trace "Handshake fails", raddr, error = exc.msg
     self.connections.del(raddr)
     raise exc
 

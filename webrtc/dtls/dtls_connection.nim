@@ -35,7 +35,7 @@ type
     # DtlsConn is a Dtls connection receiving and sending data using
     # the underlying Stun Connection
     conn*: StunConn # The wrapper protocol Stun Connection
-    raddr*: TransportAddress # Remote address
+    raddr: TransportAddress # Remote address
     dataRecv: seq[byte] # data received which will be read by SCTP
     sendFuture: Future[void].Raising([CancelledError, WebRtcError])
     # This future is set by synchronous Mbed-TLS callbacks and waited, if set, once
@@ -271,3 +271,8 @@ proc localCertificate*(conn: DtlsConn): seq[byte] =
   ## Get the local certificate
   ##
   conn.localCert
+
+proc remoteAddress*(conn: DtlsConn): TransportAddress =
+  ## Get the remote address
+  ##
+  conn.raddr
