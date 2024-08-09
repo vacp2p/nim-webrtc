@@ -8,22 +8,12 @@
 # those terms.
 
 import chronos, chronicles
-import ../errors, ../stun/[stun_connection]
-import ./dtls_utils
-
-import mbedtls/ssl
-import mbedtls/ssl_cookie
-import mbedtls/ssl_cache
-import mbedtls/pk
-import mbedtls/md
-import mbedtls/ctr_drbg
-import mbedtls/rsa
-import mbedtls/x509
-import mbedtls/x509_crt
-import mbedtls/bignum
-import mbedtls/error
-import mbedtls/net_sockets
-import mbedtls/timing
+import
+  mbedtls/[
+    ssl, ssl_cookie, ssl_cache, pk, md, ctr_drbg, rsa, x509, x509_crt, bignum, error,
+    net_sockets, timing,
+  ]
+import ../errors, ../stun/[stun_connection], ./dtls_utils
 
 logScope:
   topics = "webrtc dtls_conn"

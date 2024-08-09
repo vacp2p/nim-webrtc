@@ -10,13 +10,7 @@
 import std/times
 import ../errors
 
-import mbedtls/pk
-import mbedtls/rsa
-import mbedtls/ctr_drbg
-import mbedtls/x509_crt
-import mbedtls/bignum
-import mbedtls/md
-import mbedtls/error
+import mbedtls/[pk, rsa, ctr_drbg, x509_crt, bignum, md, error]
 
 # This sequence is used for debugging.
 const mb_ssl_states* =

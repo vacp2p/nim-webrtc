@@ -8,24 +8,15 @@
 # those terms.
 
 import deques, tables, sequtils
-import chronos, chronicles
+import
+  chronos,
+  chronicles,
+  mbedtls/[
+    ssl, ssl_cookie, ssl_cache, pk, md, entropy, ctr_drbg, rsa, x509, x509_crt, bignum,
+    error, net_sockets, timing,
+  ]
 import
   ./[dtls_utils, dtls_connection], ../errors, ../stun/[stun_connection, stun_transport]
-
-import mbedtls/ssl
-import mbedtls/ssl_cookie
-import mbedtls/ssl_cache
-import mbedtls/pk
-import mbedtls/md
-import mbedtls/entropy
-import mbedtls/ctr_drbg
-import mbedtls/rsa
-import mbedtls/x509
-import mbedtls/x509_crt
-import mbedtls/bignum
-import mbedtls/error
-import mbedtls/net_sockets
-import mbedtls/timing
 
 logScope:
   topics = "webrtc dtls"
