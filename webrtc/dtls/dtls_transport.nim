@@ -92,7 +92,7 @@ proc cleanupDtlsConn(self: Dtls, conn: DtlsConn) {.async: (raises: []).} =
   except CancelledError as exc:
     discard
 
-  self.connections.del(conn.raddr)
+  self.connections.del(conn.remoteAddress())
 
 proc accept*(
     self: Dtls
