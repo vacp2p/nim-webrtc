@@ -71,8 +71,11 @@ proc stop*(self: Dtls) {.async: (raises: [CancelledError]).} =
     return
 
   self.started = false
-  await allFutures(toSeq(self.connections.values()).mapIt(it.connection.close()))
-  await allFutures(toSeq(self.connections.values()).mapIt(it.cleanup))
+  let
+    allCloses = toSeq(self.connections.values()).mapIt(it.connection.close())
+    allCleanup = toSeq(self.connections.values()).mapIt(it.cleanup)
+  await noCancel allFutures(allCloses)
+  await noCancel allFutures(allCleanup)
   untrackCounter(DtlsTransportTracker)
 
 proc localCertificate*(self: Dtls): seq[byte] =
