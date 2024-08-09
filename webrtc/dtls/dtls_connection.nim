@@ -64,8 +64,9 @@ type
     # Mbed-TLS contexts
     ctx: MbedTLSCtx
 
-proc verify(ctx: pointer, pcert: ptr mbedtls_x509_crt,
-            state: cint, pflags: ptr uint32): cint {.cdecl.} =
+proc verify(
+    ctx: pointer, pcert: ptr mbedtls_x509_crt, state: cint, pflags: ptr uint32
+): cint {.cdecl.} =
   # verify is the procedure called by mbedtls when receiving the remote
   # certificate. It's usually used to verify the validity of the certificate.
   # We use this procedure to store the remote certificate as it's mandatory
@@ -128,7 +129,7 @@ proc acceptInit*(
     ctr_drbg: mbedtls_ctr_drbg_context,
     pkey: mbedtls_pk_context,
     srvcert: mbedtls_x509_crt,
-    localCert: seq[byte]
+    localCert: seq[byte],
 ) =
   try:
     self.ctx.ctr_drbg = ctr_drbg
@@ -140,10 +141,8 @@ proc acceptInit*(
     mb_ssl_cookie_init(self.ctx.cookie)
     mb_ssl_cache_init(self.ctx.cache)
     mb_ssl_config_defaults(
-      self.ctx.config,
-      MBEDTLS_SSL_IS_SERVER,
-      MBEDTLS_SSL_TRANSPORT_DATAGRAM,
-      MBEDTLS_SSL_PRESET_DEFAULT
+      self.ctx.config, MBEDTLS_SSL_IS_SERVER, MBEDTLS_SSL_TRANSPORT_DATAGRAM,
+      MBEDTLS_SSL_PRESET_DEFAULT,
     )
     mb_ssl_conf_own_cert(self.ctx.config, self.ctx.srvcert, self.ctx.pkey)
     mb_ssl_cookie_setup(self.ctx.cookie, mbedtls_ctr_drbg_random, self.ctx.ctr_drbg)
@@ -154,10 +153,7 @@ proc acceptInit*(
   except MbedTLSError as exc:
     raise newException(WebRtcError, "DTLS - Accept initialization: " & exc.msg, exc)
 
-proc connectInit*(
-    self: DtlsConn,
-    ctr_drbg: mbedtls_ctr_drbg_context
-) =
+proc connectInit*(self: DtlsConn, ctr_drbg: mbedtls_ctr_drbg_context) =
   try:
     self.ctx.ctr_drbg = ctr_drbg
     self.ctx.pkey = self.ctx.ctr_drbg.generateKey()
@@ -167,10 +163,8 @@ proc connectInit*(
 
     self.dtlsConnInit()
     mb_ssl_config_defaults(
-      self.ctx.config,
-      MBEDTLS_SSL_IS_CLIENT,
-      MBEDTLS_SSL_TRANSPORT_DATAGRAM,
-      MBEDTLS_SSL_PRESET_DEFAULT
+      self.ctx.config, MBEDTLS_SSL_IS_CLIENT, MBEDTLS_SSL_TRANSPORT_DATAGRAM,
+      MBEDTLS_SSL_PRESET_DEFAULT,
     )
     mb_ssl_setup(self.ctx.ssl, self.ctx.config)
     mb_ssl_conf_authmode(self.ctx.config, MBEDTLS_SSL_VERIFY_OPTIONAL)
@@ -183,9 +177,8 @@ proc join*(self: DtlsConn) {.async: (raises: [CancelledError]).} =
   await self.closeEvent.wait()
 
 proc dtlsHandshake*(
-    self: DtlsConn,
-    isServer: bool
-  ) {.async: (raises: [CancelledError, WebRtcError]).} =
+    self: DtlsConn, isServer: bool
+) {.async: (raises: [CancelledError, WebRtcError]).} =
   var shouldRead = isServer
   try:
     while self.ctx.ssl.private_state != MBEDTLS_SSL_HANDSHAKE_OVER:
@@ -269,11 +262,14 @@ proc read*(self: DtlsConn): Future[seq[byte]] {.async.} =
   while true:
     let (data, _) = await self.conn.read()
     self.dataRecv = data
-    let length = mbedtls_ssl_read(addr self.ctx.ssl, cast[ptr byte](addr res[0]), res.len().uint)
+    let length =
+      mbedtls_ssl_read(addr self.ctx.ssl, cast[ptr byte](addr res[0]), res.len().uint)
     if length == MBEDTLS_ERR_SSL_WANT_READ:
       continue
     if length < 0:
-      raise newException(WebRtcError, "DTLS - " & $(length.cint.mbedtls_high_level_strerr()))
+      raise newException(
+        WebRtcError, "DTLS - " & $(length.cint.mbedtls_high_level_strerr())
+      )
     res.setLen(length)
     return res
 

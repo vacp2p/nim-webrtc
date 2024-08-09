@@ -9,8 +9,8 @@
 
 import deques, tables, sequtils
 import chronos, chronicles
-import ./[dtls_utils, dtls_connection], ../errors,
-       ../stun/[stun_connection, stun_transport]
+import
+  ./[dtls_utils, dtls_connection], ../errors, ../stun/[stun_connection, stun_transport]
 
 import mbedtls/ssl
 import mbedtls/ssl_cookie
@@ -40,6 +40,7 @@ type
   DtlsConnAndCleanup = object
     connection: DtlsConn
     cleanup: Future[void].Raising([])
+
   Dtls* = ref object of RootObj
     connections: Table[TransportAddress, DtlsConnAndCleanup]
     transport: Stun
@@ -57,7 +58,7 @@ proc new*(T: type Dtls, transport: Stun): T =
     connections: initTable[TransportAddress, DtlsConnAndCleanup](),
     transport: transport,
     laddr: transport.laddr,
-    started: true
+    started: true,
   )
 
   mb_ctr_drbg_init(self.ctr_drbg)
@@ -96,7 +97,9 @@ proc cleanupDtlsConn(self: Dtls, conn: DtlsConn) {.async: (raises: []).} =
 
   self.connections.del(conn.raddr)
 
-proc accept*(self: Dtls): Future[DtlsConn] {.async: (raises: [CancelledError, WebRtcError]).} =
+proc accept*(
+    self: Dtls
+): Future[DtlsConn] {.async: (raises: [CancelledError, WebRtcError]).} =
   ## Accept a Dtls Connection
   ##
   if not self.started:
@@ -105,25 +108,25 @@ proc accept*(self: Dtls): Future[DtlsConn] {.async: (raises: [CancelledError, We
 
   while true:
     let stunConn = await self.transport.accept()
-    if stunConn.raddr.family == AddressFamily.IPv4 or stunConn.raddr.family == AddressFamily.IPv6:
+    if stunConn.raddr.family == AddressFamily.IPv4 or
+        stunConn.raddr.family == AddressFamily.IPv6:
       try:
         res = DtlsConn.new(stunConn, self.laddr)
-        res.acceptInit(self.ctr_drbg, self.serverPrivKey, self.serverCert, self.localCert)
-        await res.dtlsHandshake(true)
-        self.connections[res.raddr] = DtlsConnAndCleanup(
-          connection: res,
-          cleanup: self.cleanupDtlsConn(res)
+        res.acceptInit(
+          self.ctr_drbg, self.serverPrivKey, self.serverCert, self.localCert
         )
+        await res.dtlsHandshake(true)
+        self.connections[res.raddr] =
+          DtlsConnAndCleanup(connection: res, cleanup: self.cleanupDtlsConn(res))
         break
       except WebRtcError as exc:
         trace "Handshake fails, try accept another connection",
-              remoteAddress = res.raddr, error = exc.msg
+          remoteAddress = res.raddr, error = exc.msg
     self.connections.del(res.raddr)
   return res
 
 proc connect*(
-    self: Dtls,
-    raddr: TransportAddress
+    self: Dtls, raddr: TransportAddress
 ): Future[DtlsConn] {.async: (raises: [CancelledError, WebRtcError]).} =
   ## Connect to a remote address, creating a Dtls Connection
   ##
@@ -136,10 +139,8 @@ proc connect*(
 
   try:
     await res.dtlsHandshake(false)
-    self.connections[res.raddr] = DtlsConnAndCleanup(
-      connection: res,
-      cleanup: self.cleanupDtlsConn(res)
-    )
+    self.connections[res.raddr] =
+      DtlsConnAndCleanup(connection: res, cleanup: self.cleanupDtlsConn(res))
   except WebRtcError as exc:
     trace "Handshake fails", remoteAddress = raddr, error = exc.msg
     self.connections.del(raddr)

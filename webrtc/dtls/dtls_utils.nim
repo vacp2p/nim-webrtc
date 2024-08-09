@@ -19,38 +19,27 @@ import mbedtls/md
 import mbedtls/error
 
 # This sequence is used for debugging.
-const mb_ssl_states* = @[
-  "MBEDTLS_SSL_HELLO_REQUEST",
-  "MBEDTLS_SSL_CLIENT_HELLO",
-  "MBEDTLS_SSL_SERVER_HELLO",
-  "MBEDTLS_SSL_SERVER_CERTIFICATE",
-  "MBEDTLS_SSL_SERVER_KEY_EXCHANGE",
-  "MBEDTLS_SSL_CERTIFICATE_REQUEST",
-  "MBEDTLS_SSL_SERVER_HELLO_DONE",
-  "MBEDTLS_SSL_CLIENT_CERTIFICATE",
-  "MBEDTLS_SSL_CLIENT_KEY_EXCHANGE",
-  "MBEDTLS_SSL_CERTIFICATE_VERIFY",
-  "MBEDTLS_SSL_CLIENT_CHANGE_CIPHER_SPEC",
-  "MBEDTLS_SSL_CLIENT_FINISHED",
-  "MBEDTLS_SSL_SERVER_CHANGE_CIPHER_SPEC",
-  "MBEDTLS_SSL_SERVER_FINISHED",
-  "MBEDTLS_SSL_FLUSH_BUFFERS",
-  "MBEDTLS_SSL_HANDSHAKE_WRAPUP",
-  "MBEDTLS_SSL_NEW_SESSION_TICKET",
-  "MBEDTLS_SSL_SERVER_HELLO_VERIFY_REQUEST_SENT",
-  "MBEDTLS_SSL_HELLO_RETRY_REQUEST",
-  "MBEDTLS_SSL_ENCRYPTED_EXTENSIONS",
-  "MBEDTLS_SSL_END_OF_EARLY_DATA",
-  "MBEDTLS_SSL_CLIENT_CERTIFICATE_VERIFY",
-  "MBEDTLS_SSL_CLIENT_CCS_AFTER_SERVER_FINISHED",
-  "MBEDTLS_SSL_CLIENT_CCS_BEFORE_2ND_CLIENT_HELLO",
-  "MBEDTLS_SSL_SERVER_CCS_AFTER_SERVER_HELLO",
-  "MBEDTLS_SSL_CLIENT_CCS_AFTER_CLIENT_HELLO",
-  "MBEDTLS_SSL_SERVER_CCS_AFTER_HELLO_RETRY_REQUEST",
-  "MBEDTLS_SSL_HANDSHAKE_OVER",
-  "MBEDTLS_SSL_TLS1_3_NEW_SESSION_TICKET",
-  "MBEDTLS_SSL_TLS1_3_NEW_SESSION_TICKET_FLUSH"
-]
+const mb_ssl_states* =
+  @[
+    "MBEDTLS_SSL_HELLO_REQUEST", "MBEDTLS_SSL_CLIENT_HELLO", "MBEDTLS_SSL_SERVER_HELLO",
+    "MBEDTLS_SSL_SERVER_CERTIFICATE", "MBEDTLS_SSL_SERVER_KEY_EXCHANGE",
+    "MBEDTLS_SSL_CERTIFICATE_REQUEST", "MBEDTLS_SSL_SERVER_HELLO_DONE",
+    "MBEDTLS_SSL_CLIENT_CERTIFICATE", "MBEDTLS_SSL_CLIENT_KEY_EXCHANGE",
+    "MBEDTLS_SSL_CERTIFICATE_VERIFY", "MBEDTLS_SSL_CLIENT_CHANGE_CIPHER_SPEC",
+    "MBEDTLS_SSL_CLIENT_FINISHED", "MBEDTLS_SSL_SERVER_CHANGE_CIPHER_SPEC",
+    "MBEDTLS_SSL_SERVER_FINISHED", "MBEDTLS_SSL_FLUSH_BUFFERS",
+    "MBEDTLS_SSL_HANDSHAKE_WRAPUP", "MBEDTLS_SSL_NEW_SESSION_TICKET",
+    "MBEDTLS_SSL_SERVER_HELLO_VERIFY_REQUEST_SENT", "MBEDTLS_SSL_HELLO_RETRY_REQUEST",
+    "MBEDTLS_SSL_ENCRYPTED_EXTENSIONS", "MBEDTLS_SSL_END_OF_EARLY_DATA",
+    "MBEDTLS_SSL_CLIENT_CERTIFICATE_VERIFY",
+    "MBEDTLS_SSL_CLIENT_CCS_AFTER_SERVER_FINISHED",
+    "MBEDTLS_SSL_CLIENT_CCS_BEFORE_2ND_CLIENT_HELLO",
+    "MBEDTLS_SSL_SERVER_CCS_AFTER_SERVER_HELLO",
+    "MBEDTLS_SSL_CLIENT_CCS_AFTER_CLIENT_HELLO",
+    "MBEDTLS_SSL_SERVER_CCS_AFTER_HELLO_RETRY_REQUEST", "MBEDTLS_SSL_HANDSHAKE_OVER",
+    "MBEDTLS_SSL_TLS1_3_NEW_SESSION_TICKET",
+    "MBEDTLS_SSL_TLS1_3_NEW_SESSION_TICKET_FLUSH",
+  ]
 
 template generateKey*(random: mbedtls_ctr_drbg_context): mbedtls_pk_context =
   var res: mbedtls_pk_context
@@ -60,8 +49,9 @@ template generateKey*(random: mbedtls_ctr_drbg_context): mbedtls_pk_context =
   let x = mb_pk_rsa(res)
   res
 
-template generateCertificate*(random: mbedtls_ctr_drbg_context,
-                              issuer_key: mbedtls_pk_context): mbedtls_x509_crt =
+template generateCertificate*(
+    random: mbedtls_ctr_drbg_context, issuer_key: mbedtls_pk_context
+): mbedtls_x509_crt =
   let
     name = "C=FR,O=Status,CN=webrtc"
     time_format =
@@ -75,7 +65,7 @@ template generateCertificate*(random: mbedtls_ctr_drbg_context,
   var write_cert: mbedtls_x509write_cert
   var serial_mpi: mbedtls_mpi
   mb_x509write_crt_init(write_cert)
-  mb_x509write_crt_set_md_alg(write_cert, MBEDTLS_MD_SHA256);
+  mb_x509write_crt_set_md_alg(write_cert, MBEDTLS_MD_SHA256)
   mb_x509write_crt_set_subject_key(write_cert, issuer_key)
   mb_x509write_crt_set_issuer_key(write_cert, issuer_key)
   mb_x509write_crt_set_subject_name(write_cert, name)
