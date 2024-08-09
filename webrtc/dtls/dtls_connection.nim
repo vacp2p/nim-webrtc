@@ -53,13 +53,14 @@ type
     # Mbed-TLS contexts
     ctx: MbedTLSCtx
 
-proc verify(
+proc getRemoteCertificateCallback(
     ctx: pointer, pcert: ptr mbedtls_x509_crt, state: cint, pflags: ptr uint32
 ): cint {.cdecl.} =
-  # verify is the procedure called by mbedtls when receiving the remote
-  # certificate. It's usually used to verify the validity of the certificate.
-  # We use this procedure to store the remote certificate as it's mandatory
-  # to have it for the Prologue of the Noise protocol, aswell as the localCertificate.
+  # getRemoteCertificateCallback is the procedure called by mbedtls when
+  # receiving the remote certificate. It's usually used to verify the validity
+  # of the certificate, we don't do it. We use this procedure to store the remot
+  # certificate as it's mandatory to have it for the Prologue of the Noise
+  # protocol, aswell as the localCertificate.
   var self = cast[DtlsConn](ctx)
   let cert = pcert[]
 
@@ -110,7 +111,7 @@ proc dtlsConnInit(self: DtlsConn) =
   mb_ssl_conf_read_timeout(self.ctx.config, 10000) # in milliseconds
   mb_ssl_conf_ca_chain(self.ctx.config, self.ctx.srvcert.next, nil)
   mb_ssl_set_timer_cb(self.ctx.ssl, self.ctx.timer)
-  mb_ssl_set_verify(self.ctx.ssl, verify, self)
+  mb_ssl_set_verify(self.ctx.ssl, getRemoteCertificateCallback, self)
   mb_ssl_set_bio(self.ctx.ssl, cast[pointer](self), dtlsSend, dtlsRecv, nil)
 
 proc acceptInit*(
