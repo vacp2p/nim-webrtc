@@ -45,7 +45,6 @@ type
     # DtlsConn is a Dtls connection receiving and sending data using
     # the underlying Stun Connection
     conn*: StunConn # The wrapper protocol Stun Connection
-    laddr: TransportAddress # Local address
     raddr*: TransportAddress # Remote address
     dataRecv: seq[byte] # data received which will be read by SCTP
     sendFuture: Future[void].Raising([CancelledError, WebRtcError])
@@ -105,10 +104,10 @@ proc dtlsRecv(ctx: pointer, buf: ptr byte, len: uint): cint {.cdecl.} =
   self.dataRecv = @[]
   trace "dtls receive", len, result
 
-proc new*(T: type DtlsConn, conn: StunConn, laddr: TransportAddress): T =
+proc new*(T: type DtlsConn, conn: StunConn): T =
   ## Initialize a Dtls Connection
   ##
-  var self = T(conn: conn, laddr: laddr)
+  var self = T(conn: conn)
   self.raddr = conn.raddr
   self.closed = false
   self.closeEvent = newAsyncEvent()

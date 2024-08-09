@@ -44,7 +44,7 @@ type
   Dtls* = ref object of RootObj
     connections: Table[TransportAddress, DtlsConnAndCleanup]
     transport: Stun
-    laddr*: TransportAddress
+    laddr: TransportAddress
     started: bool
     ctr_drbg: mbedtls_ctr_drbg_context
     entropy: mbedtls_entropy_context
@@ -111,7 +111,7 @@ proc accept*(
     if stunConn.raddr.family == AddressFamily.IPv4 or
         stunConn.raddr.family == AddressFamily.IPv6:
       try:
-        res = DtlsConn.new(stunConn, self.laddr)
+        res = DtlsConn.new(stunConn)
         res.acceptInit(
           self.ctr_drbg, self.serverPrivKey, self.serverCert, self.localCert
         )
@@ -134,7 +134,7 @@ proc connect*(
     raise newException(WebRtcError, "DTLS - Dtls transport not started")
   if raddr.family != AddressFamily.IPv4 and raddr.family != AddressFamily.IPv6:
     raise newException(WebRtcError, "DTLS - Can only connect to IP address")
-  var res = DtlsConn.new(await self.transport.connect(raddr), self.laddr)
+  var res = DtlsConn.new(await self.transport.connect(raddr))
   res.connectInit(self.ctr_drbg)
 
   try:

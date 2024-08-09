@@ -22,14 +22,16 @@ suite "DTLS":
 
   asyncTest "Two DTLS nodes connecting to each other, then sending/receiving data":
     let
-      udp1 = UdpTransport.new(initTAddress("127.0.0.1:4444"))
-      udp2 = UdpTransport.new(initTAddress("127.0.0.1:5555"))
+      localAddr1 = initTAddress("127.0.0.1:4444")
+      localAddr2 = initTAddress("127.0.0.1:5555")
+      udp1 = UdpTransport.new(localAddr1)
+      udp2 = UdpTransport.new(localAddr2)
       stun1 = Stun.new(udp1)
       stun2 = Stun.new(udp2)
       dtls1 = Dtls.new(stun1)
       dtls2 = Dtls.new(stun2)
       conn1Fut = dtls1.accept()
-      conn2 = await dtls2.connect(dtls1.laddr)
+      conn2 = await dtls2.connect(localAddr1)
       conn1 = await conn1Fut
 
     await conn1.write(@[1'u8, 2, 3, 4])
@@ -46,9 +48,12 @@ suite "DTLS":
 
   asyncTest "Two DTLS nodes connecting to the same DTLS server, sending/receiving data":
     let
-      udp1 = UdpTransport.new(initTAddress("127.0.0.1:4444"))
-      udp2 = UdpTransport.new(initTAddress("127.0.0.1:5555"))
-      udp3 = UdpTransport.new(initTAddress("127.0.0.1:6666"))
+      localAddr1 = initTAddress("127.0.0.1:4444")
+      localAddr2 = initTAddress("127.0.0.1:5555")
+      localAddr3 = initTAddress("127.0.0.1:6666")
+      udp1 = UdpTransport.new(localAddr1)
+      udp2 = UdpTransport.new(localAddr2)
+      udp3 = UdpTransport.new(localAddr3)
       stun1 = Stun.new(udp1)
       stun2 = Stun.new(udp2)
       stun3 = Stun.new(udp3)
@@ -57,8 +62,8 @@ suite "DTLS":
       dtls3 = Dtls.new(stun3)
       servConn1Fut = dtls1.accept()
       servConn2Fut = dtls1.accept()
-      clientConn1 = await dtls2.connect(dtls1.laddr)
-      clientConn2 = await dtls3.connect(dtls1.laddr)
+      clientConn1 = await dtls2.connect(localAddr1)
+      clientConn2 = await dtls3.connect(localAddr1)
       servConn1 = await servConn1Fut
       servConn2 = await servConn2Fut
 
