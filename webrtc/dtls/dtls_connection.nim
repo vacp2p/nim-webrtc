@@ -74,11 +74,10 @@ proc dtlsSend(ctx: pointer, buf: ptr byte, len: uint): cint {.cdecl.} =
   # we store the message to be sent and it after the end of the function
   # (see write or dtlsHanshake for example).
   var self = cast[DtlsConn](ctx)
-  var toWrite = newSeq[byte](len)
+  self.dataToSend = newSeq[byte](len)
   if len > 0:
-    copyMem(addr toWrite[0], buf, len)
+    copyMem(addr self.dataToSend[0], buf, len)
   trace "dtls send", len
-  self.dataToSend = toWrite
   result = len.cint
 
 proc dtlsRecv(ctx: pointer, buf: ptr byte, len: uint): cint {.cdecl.} =
@@ -187,6 +186,7 @@ proc dtlsHandshake*(
       let res = mb_ssl_handshake_step(self.ctx.ssl)
       if self.dataToSend.len() > 0:
         await self.conn.write(self.dataToSend)
+      self.dataToSend = @[]
       shouldRead = false
       if res == MBEDTLS_ERR_SSL_WANT_WRITE:
         continue
@@ -215,6 +215,7 @@ proc close*(self: DtlsConn) {.async: (raises: [CancelledError, WebRtcError]).} =
   let x = mbedtls_ssl_close_notify(addr self.ctx.ssl)
   if self.dataToSend.len() > 0:
     await self.conn.write(self.dataToSend)
+  self.dataToSend = @[]
   untrackCounter(DtlsConnTracker)
   self.closeEvent.fire()
 
@@ -232,6 +233,7 @@ proc write*(self: DtlsConn, msg: seq[byte]) {.async.} =
     let write = mb_ssl_write(self.ctx.ssl, buf)
     if self.dataToSend.len() > 0:
       await self.conn.write(self.dataToSend)
+    self.dataToSend = @[]
     trace "Dtls write", msgLen = msg.len(), actuallyWrote = write
   except MbedTLSError as exc:
     trace "Dtls write error", errorMsg = exc.msg
