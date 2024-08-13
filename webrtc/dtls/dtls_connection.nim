@@ -37,9 +37,9 @@ type
     conn*: StunConn # The wrapper protocol Stun Connection
     raddr: TransportAddress # Remote address
     dataRecv: seq[byte] # data received which will be read by SCTP
-    sendFuture: Future[void].Raising([CancelledError, WebRtcError])
-    # This future is set by synchronous Mbed-TLS callbacks and waited, if set, once
-    # the synchronous functions ends
+    dataToSend: seq[byte]
+    # This sequence is set by synchronous Mbed-TLS `dtlsSend` callbacks
+    # and sent, if set, once the synchronous functions ends
 
     # Close connection management
     closed: bool
@@ -71,14 +71,14 @@ proc getRemoteCertificateCallback(
 proc dtlsSend(ctx: pointer, buf: ptr byte, len: uint): cint {.cdecl.} =
   # dtlsSend is the procedure called by mbedtls when data needs to be sent.
   # As the StunConn's write proc is asynchronous and dtlsSend cannot be async,
-  # we store the future of this write and await it after the end of the
-  # function (see write or dtlsHanshake for example).
+  # we store the message to be sent and it after the end of the function
+  # (see write or dtlsHanshake for example).
   var self = cast[DtlsConn](ctx)
   var toWrite = newSeq[byte](len)
   if len > 0:
     copyMem(addr toWrite[0], buf, len)
   trace "dtls send", len
-  self.sendFuture = self.conn.write(toWrite)
+  self.dataToSend = toWrite
   result = len.cint
 
 proc dtlsRecv(ctx: pointer, buf: ptr byte, len: uint): cint {.cdecl.} =
@@ -183,10 +183,10 @@ proc dtlsHandshake*(
             doAssert(false, "Should never happen")
         let (data, _) = await self.conn.read()
         self.dataRecv = data
-      self.sendFuture = nil
+      self.dataToSend = @[]
       let res = mb_ssl_handshake_step(self.ctx.ssl)
-      if not self.sendFuture.isNil():
-        await self.sendFuture
+      if self.dataToSend.len() > 0:
+        await self.conn.write(self.dataToSend)
       shouldRead = false
       if res == MBEDTLS_ERR_SSL_WANT_WRITE:
         continue
@@ -211,10 +211,10 @@ proc close*(self: DtlsConn) {.async: (raises: [CancelledError, WebRtcError]).} =
     debug "Try to close an already closed DtlsConn"
     return
   self.closed = true
-  self.sendFuture = nil
+  self.dataToSend = @[]
   let x = mbedtls_ssl_close_notify(addr self.ctx.ssl)
-  if not self.sendFuture.isNil():
-    await self.sendFuture
+  if self.dataToSend.len() > 0:
+    await self.conn.write(self.dataToSend)
   untrackCounter(DtlsConnTracker)
   self.closeEvent.fire()
 
@@ -222,17 +222,16 @@ proc write*(self: DtlsConn, msg: seq[byte]) {.async.} =
   ## Write a message using mbedtls_ssl_write
   ##
   # Mbed-TLS will wrap the message properly and call `dtlsSend` callback.
-  # `dtlsSend` will write the message on the higher Stun connection.
+  # `dtlsSend` will store the message to be sent on the higher Stun connection.
   if self.closed:
     debug "Try to write on an already closed DtlsConn"
     return
   var buf = msg
   try:
-    self.sendFuture = nil
+    self.dataToSend = @[]
     let write = mb_ssl_write(self.ctx.ssl, buf)
-    if not self.sendFuture.isNil():
-      let sendFuture = self.sendFuture
-      await sendFuture
+    if self.dataToSend.len() > 0:
+      await self.conn.write(self.dataToSend)
     trace "Dtls write", msgLen = msg.len(), actuallyWrote = write
   except MbedTLSError as exc:
     trace "Dtls write error", errorMsg = exc.msg
