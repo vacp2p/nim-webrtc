@@ -179,7 +179,7 @@ proc dtlsHandshake*(
           of AddressFamily.IPv6:
             mb_ssl_set_client_transport_id(self.ctx.ssl, self.raddr.address_v6)
           else:
-            doAssert(false, "Should never happen")
+            raiseAssert("Remote address must be IPv4 or IPv6")
         let (data, _) = await self.conn.read()
         self.dataRecv = data
       self.dataToSend = @[]
