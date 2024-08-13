@@ -17,11 +17,14 @@ let lang = getEnv("NIMLANG", "c") # Which backend (c/cpp/js)
 let flags = getEnv("NIMFLAGS", "") # Extra flags for the compiler
 let verbose = getEnv("V", "") notin ["", "0"]
 
-let cfg =
+var cfg =
   " --styleCheck:usages --styleCheck:error" &
   (if verbose: "" else: " --verbosity:0 --hints:off") &
   " --skipParentCfg --skipUserCfg -f" &
   " --threads:on --opt:speed"
+
+when defined(windows):
+  cfg = cfg & " --clib:ws2_32"
 
 import hashes
 
