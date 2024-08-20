@@ -60,10 +60,10 @@ proc handleAccept(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
 
   if sctpSocket.isNil():
     warn "usrsctp_accept fails", error = sctpStrerror(errno)
-    conn.state = SctpClosed
+    conn.state = SctpState.SctpClosed
   else:
     conn.sctpSocket = sctpSocket
-    conn.state = SctpConnected
+    conn.state = SctpState.SctpConnected
   conn.acceptEvent.fire()
 
 proc handleConnect(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
@@ -73,12 +73,12 @@ proc handleConnect(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
     events = usrsctp_get_events(sock)
 
   trace "Handle Connect", events, state = conn.state
-  if conn.state == SctpConnecting:
+  if conn.state == SctpState.SctpConnecting:
     if bitand(events, SCTP_EVENT_ERROR) != 0:
       warn "Cannot connect", raddr = conn.raddr
-      conn.state = SctpClosed
+      conn.state = SctpState.SctpClosed
     elif bitand(events, SCTP_EVENT_WRITE) != 0:
-      conn.state = SctpConnected
+      conn.state = SctpState.SctpConnected
       doAssert 0 == usrsctp_set_upcall(conn.sctpSocket, recvCallback, data)
     conn.connectEvent.fire()
   else:
@@ -108,7 +108,7 @@ proc new*(T: type Sctp, dtls: Dtls): T =
   self.timersHandler = timersHandler()
   self.dtls = dtls
 
-  usrsctp_init_nothreads(dtls.laddr.port.uint16, sendCallback, printf)
+  usrsctp_init_nothreads(dtls.localAddress.port.uint16, sendCallback, printf)
   discard usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_NONE)
   discard usrsctp_sysctl_set_sctp_ecn_enable(1)
   usrsctp_register_address(cast[pointer](self))
@@ -180,7 +180,7 @@ proc accept*(self: Sctp): Future[SctpConn] {.async.} =
     conn.readLoop = conn.readLoopProc()
     conn.acceptEvent.clear()
     await conn.acceptEvent.wait()
-    if conn.state == SctpConnected or conn.socketSetup(recvCallback):
+    if conn.state == SctpState.SctpConnected or conn.socketSetup(recvCallback):
       break
     await conn.close()
 
@@ -213,7 +213,7 @@ proc connect*(self: Sctp,
               sctpPort: uint16 = 5000): Future[SctpConn] {.async.} =
   trace "Create Connection", raddr
   let conn = SctpConn.new(await self.dtls.connect(raddr))
-  conn.state = SctpConnecting
+  conn.state = SctpState.SctpConnecting
   conn.sctpSocket = usrsctp_socket(AF_CONN, posix.SOCK_STREAM, IPPROTO_SCTP, nil, nil, 0, nil)
 
   if not conn.socketSetup(handleConnect):
@@ -233,7 +233,7 @@ proc connect*(self: Sctp,
 
   conn.connectEvent.clear()
   await conn.connectEvent.wait()
-  if conn.state == SctpClosed:
+  if conn.state == SctpState.SctpClosed:
     raise newException(WebRtcError, "SCTP - Connection failed")
   self.connections[raddr] = conn
   return conn

@@ -130,7 +130,7 @@ proc new*(T: typedesc[SctpConn], conn: DtlsConn): T =
     state: SctpConnecting,
     connectEvent: AsyncEvent(),
     acceptEvent: AsyncEvent(),
-    raddr: conn.raddr,
+    raddr: conn.remoteAddress(),
     dataRecv: newAsyncQueue[SctpMessage]()
    )
 
