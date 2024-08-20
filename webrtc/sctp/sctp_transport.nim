@@ -40,7 +40,6 @@ type
     isServer: bool
     sockServer: ptr socket
     pendingConnections: seq[SctpConn]
-    pendingConnections2: Table[SockAddr, SctpConn]
     sentFuture: Future[void]
 
 const IPPROTO_SCTP = 132
