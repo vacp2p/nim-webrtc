@@ -55,7 +55,7 @@ proc recvCallback*(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
     conn = cast[SctpConn](data)
     events = usrsctp_get_events(sock)
 
-  trace "Handle Upcall", events
+  trace "Receive callback", events
   if bitand(events, SCTP_EVENT_READ) != 0:
     var
       message = SctpMessage(
@@ -105,15 +105,13 @@ proc sendCallback*(ctx: pointer,
                    tos: uint8,
                    set_df: uint8): cint {.cdecl.} =
   # This proc is called by usrsctp everytime usrsctp tries to send data.
-  let data = usrsctp_dumppacket(buffer, length, SCTP_DUMP_OUTBOUND)
-  if data != nil:
-    trace "sendCallback", sctpPacket = data.getSctpPacket(), length
-    usrsctp_freedumpbuffer(data)
-  let sctpConn = cast[SctpConn](ctx)
-  let buf = @(buffer.makeOpenArray(byte, int(length)))
+  let
+    sctpConn = cast[SctpConn](ctx)
+    buf = @(buffer.makeOpenArray(byte, int(length)))
+  trace "sendCallback", sctpPacket = $(buf.getSctpPacket())
   proc testSend() {.async.} =
     try:
-      trace "Send To", address = sctpConn.address
+      trace "Send To", address = sctpConn.raddr
       await sctpConn.conn.write(buf)
     except CatchableError as exc:
       trace "Send Failed", message = exc.msg

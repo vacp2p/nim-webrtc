@@ -110,22 +110,19 @@ proc new*(T: type Sctp, dtls: Dtls): T =
   usrsctp_init_nothreads(dtls.localAddress.port.uint16, sendCallback, printf)
   discard usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_NONE)
   discard usrsctp_sysctl_set_sctp_ecn_enable(1)
-  usrsctp_register_address(cast[pointer](self))
   return self
 
-proc stop*(self: Sctp) {.async.} =
+proc close*(self: Sctp) {.async.} =
   # TODO: close every connections
   discard self.usrsctpAwait usrsctp_finish()
 
 proc readLoopProc(res: SctpConn) {.async.} =
   while true:
-    let
-      msg = await res.conn.read()
-      data = usrsctp_dumppacket(unsafeAddr msg[0], uint(msg.len), SCTP_DUMP_INBOUND)
-    if not data.isNil():
-      trace "Receive data", remoteAddress = res.conn.raddr,
-            sctpPacket = data.getSctpPacket()
-      usrsctp_freedumpbuffer(data)
+    let msg = await res.conn.read()
+    if msg == @[]:
+      trace "Sctp read loop stopped, DTLS connection closed"
+      return
+    trace "Receive data", remoteAddress = res.conn.remoteAddress(), sctPacket = $(msg.getSctpPacket())
     usrsctp_conninput(cast[pointer](res), unsafeAddr msg[0], uint(msg.len), 0)
 
 proc socketSetup(
@@ -172,6 +169,7 @@ proc accept*(self: Sctp): Future[SctpConn] {.async.} =
   ##
   if not self.isServer:
     raise newException(WebRtcError, "SCTP - Not a server")
+  trace "Accept connection"
   var conn: SctpConn
   while true:
     conn = SctpConn.new(await self.dtls.accept())
@@ -179,7 +177,7 @@ proc accept*(self: Sctp): Future[SctpConn] {.async.} =
     conn.readLoop = conn.readLoopProc()
     conn.acceptEvent.clear()
     await conn.acceptEvent.wait()
-    if conn.state == SctpState.SctpConnected or conn.socketSetup(recvCallback):
+    if conn.state == SctpState.SctpConnected and conn.socketSetup(recvCallback):
       break
     await conn.close()
 

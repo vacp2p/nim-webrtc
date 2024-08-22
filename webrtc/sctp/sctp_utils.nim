@@ -27,10 +27,31 @@ type
     header*: SctpPacketHeader
     chunks*: seq[SctpChunk]
 
+proc dataToString(data: seq[byte]): string =
+  if data.len() < 8:
+    return $data
+  result = "@["
+  result &= $data[0] & ", " & $data[1] & ", " & $data[2] & ", " & $data[3] & " ... "
+  result &= $data[^4] & ", " & $data[^3] & ", " & $data[^2] & ", " & $data[^1] & "]"
+
+proc `$`*(packet: SctpPacketStructure): string =
+  result = "{header: {srcPort: "
+  result &= $(packet.header.srcPort) & ", dstPort: "
+  result &= $(packet.header.dstPort) & "}, chunks: @["
+  var counter = 0
+  for chunk in packet.chunks:
+    result &= "{type: " & $(chunk.chunkType) & ", len: "
+    result &= $(chunk.length) & ", data: "
+    result &= chunk.data.dataToString()
+    counter += 1
+    if counter < packet.chunks.len():
+      result &= ", "
+  result &= "]}"
+
 proc getSctpPacket*(buffer: seq[byte]): SctpPacketStructure =
   # Only used for debugging/trace
   result.header = Binary.decode(buffer, SctpPacketHeader)
-  var size = sizeof(SctpPacketStructure)
+  var size = sizeof(SctpPacketHeader)
   while size < buffer.len:
     let chunk = Binary.decode(buffer[size..^1], SctpChunk)
     result.chunks.add(chunk)
