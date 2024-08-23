@@ -39,6 +39,7 @@ type
     state*: SctpState
     connectEvent*: AsyncEvent
     acceptEvent*: AsyncEvent
+    readLoop*: Future[void]
     raddr*: TransportAddress
     sctpSocket*: ptr socket
     dataRecv*: AsyncQueue[SctpMessage]
