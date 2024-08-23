@@ -44,7 +44,7 @@ type
     raddr*: TransportAddress
     sctpSocket*: ptr socket
     dataRecv*: AsyncQueue[SctpMessage]
-    sentFuture*: Future[void]
+    sentFuture*: Future[void].Raising([CancelledError])
 
 # -- usrsctp send and receive callback --
 
@@ -109,7 +109,7 @@ proc sendCallback*(ctx: pointer,
     sctpConn = cast[SctpConn](ctx)
     buf = @(buffer.makeOpenArray(byte, int(length)))
   trace "sendCallback", sctpPacket = $(buf.getSctpPacket())
-  proc testSend() {.async.} =
+  proc testSend() {.async: (raises: [CancelledError]).} =
     try:
       trace "Send To", address = sctpConn.raddr
       await sctpConn.conn.write(buf)
@@ -132,13 +132,13 @@ proc new*(T: typedesc[SctpConn], conn: DtlsConn): T =
     dataRecv: newAsyncQueue[SctpMessage]()
    )
 
-proc read*(self: SctpConn): Future[SctpMessage] {.async.} =
+proc read*(self: SctpConn): Future[SctpMessage] {.async: (raises: [CancelledError]).} =
   # Used by DataChannel, returns SctpMessage in order to get the stream
   # and protocol ids
   return await self.dataRecv.popFirst()
 
 proc write*(self: SctpConn, buf: seq[byte],
-    sendParams = default(SctpMessageParameters)) {.async.} =
+    sendParams = default(SctpMessageParameters)) {.async: (raises: [CancelledError, WebRtcError]).} =
   # Used by DataChannel, writes buf on the Dtls connection.
   trace "Write", buf
 
@@ -162,10 +162,10 @@ proc write*(self: SctpConn, buf: seq[byte],
   if sendvErr < 0:
     raise newException(WebRtcError, $(sctpStrerror(sendvErr)))
 
-proc write*(self: SctpConn, s: string) {.async.} =
+proc write*(self: SctpConn, s: string) {.async: (raises: [CancelledError, WebRtcError]).} =
   await self.write(s.toBytes())
 
-proc close*(self: SctpConn) {.async.} =
+proc close*(self: SctpConn) {.async: (raises: [CancelledError]).} =
   self.usrsctpAwait:
     self.sctpSocket.usrsctp_close()
   usrsctp_deregister_address(cast[pointer](self))

@@ -39,7 +39,7 @@ type
     isServer: bool
     sockServer: ptr socket
     pendingConnections: seq[SctpConn]
-    sentFuture: Future[void]
+    sentFuture: Future[void].Raising([CancelledError])
 
 const IPPROTO_SCTP = 132
 
@@ -105,11 +105,11 @@ proc new*(T: type Sctp, dtls: Dtls): T =
   discard usrsctp_sysctl_set_sctp_ecn_enable(1)
   return self
 
-proc close*(self: Sctp) {.async.} =
+proc close*(self: Sctp) {.async: (raises: [CancelledError]).} =
   # TODO: close every connections
   discard self.usrsctpAwait usrsctp_finish()
 
-proc readLoopProc(res: SctpConn) {.async.} =
+proc readLoopProc(res: SctpConn) {.async: (raises: [CancelledError, WebRtcError]).} =
   while true:
     let msg = await res.conn.read()
     if msg == @[]:
@@ -157,7 +157,7 @@ proc socketSetup(
     return false
   return true
 
-proc accept*(self: Sctp): Future[SctpConn] {.async.} =
+proc accept*(self: Sctp): Future[SctpConn] {.async: (raises: [CancelledError, WebRtcError]).} =
   ## Accept an Sctp Connection
   ##
   if not self.isServer:
@@ -200,7 +200,7 @@ proc listen*(self: Sctp, sctpPort: uint16 = 5000) =
 
 proc connect*(self: Sctp,
               raddr: TransportAddress,
-              sctpPort: uint16 = 5000): Future[SctpConn] {.async.} =
+              sctpPort: uint16 = 5000): Future[SctpConn] {.async: (raises: [CancelledError, WebRtcError]).} =
   trace "Create Connection", raddr
   let conn = SctpConn.new(await self.dtls.connect(raddr))
   conn.state = SctpState.SctpConnecting
