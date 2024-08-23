@@ -36,7 +36,6 @@ type
     laddr*: TransportAddress
     connections: Table[TransportAddress, SctpConn]
     gotConnection: AsyncEvent
-    timersHandler: Future[void]
     isServer: bool
     sockServer: ptr socket
     pendingConnections: seq[SctpConn]
@@ -85,11 +84,6 @@ proc handleConnect(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
 
 # -- Sctp --
 
-proc timersHandler() {.async.} =
-  while true:
-    await sleepAsync(500.milliseconds)
-    usrsctp_handle_timers(500)
-
 proc stopServer*(self: Sctp) =
   if not self.isServer:
     trace "Try to close a client"
@@ -104,7 +98,6 @@ proc stopServer*(self: Sctp) =
 proc new*(T: type Sctp, dtls: Dtls): T =
   var self = T()
   self.gotConnection = newAsyncEvent()
-  self.timersHandler = timersHandler()
   self.dtls = dtls
 
   usrsctp_init_nothreads(dtls.localAddress.port.uint16, sendCallback, printf)

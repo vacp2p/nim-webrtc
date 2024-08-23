@@ -28,6 +28,7 @@ type
     chunks*: seq[SctpChunk]
 
 proc dataToString(data: seq[byte]): string =
+  # Only used for debugging/trace
   if data.len() < 8:
     return $data
   result = "@["
@@ -35,6 +36,7 @@ proc dataToString(data: seq[byte]): string =
   result &= $data[^4] & ", " & $data[^3] & ", " & $data[^2] & ", " & $data[^1] & "]"
 
 proc `$`*(packet: SctpPacketStructure): string =
+  # Only used for debugging/trace
   result = "{header: {srcPort: "
   result &= $(packet.header.srcPort) & ", dstPort: "
   result &= $(packet.header.dstPort) & "}, chunks: @["
