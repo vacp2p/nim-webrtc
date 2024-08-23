@@ -14,6 +14,8 @@ import ./sctp_utils, ../errors, ../dtls/dtls_connection
 logScope:
   topics = "webrtc sctp_connection"
 
+const SctpConnTracker* = "webrtc.sctp.conn"
+
 # TODO: closing connection if usrsctp_recv / usrsctp_read fails
 type
   SctpState* = enum
@@ -37,7 +39,6 @@ type
     state*: SctpState
     connectEvent*: AsyncEvent
     acceptEvent*: AsyncEvent
-    readLoop*: Future[void]
     raddr*: TransportAddress
     sctpSocket*: ptr socket
     dataRecv*: AsyncQueue[SctpMessage]
@@ -185,3 +186,4 @@ proc close*(self: SctpConn) {.async: (raises: [CancelledError]).} =
   self.usrsctpAwait:
     self.sctpSocket.usrsctp_close()
   usrsctp_deregister_address(cast[pointer](self))
+  untrackCounter(SctpConnTracker)

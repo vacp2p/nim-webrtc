@@ -14,6 +14,10 @@ import
 
 export chronicles
 
+const
+  SctpTransportTracker* = "webrtc.sctp.transport"
+  IPPROTO_SCTP = 132
+
 logScope:
   topics = "webrtc sctp"
 
@@ -32,15 +36,12 @@ proc printf(
 
 type Sctp* = ref object
   dtls: Dtls
-  laddr*: TransportAddress
   connections: Table[TransportAddress, SctpConn]
   gotConnection: AsyncEvent
   isServer: bool
   sockServer: ptr socket
   pendingConnections: seq[SctpConn]
   sentFuture: Future[void].Raising([CancelledError])
-
-const IPPROTO_SCTP = 132
 
 # -- usrsctp accept and connect callbacks --
 
@@ -103,10 +104,12 @@ proc new*(T: type Sctp, dtls: Dtls): T =
   usrsctp_init_nothreads(dtls.localAddress.port.uint16, sendCallback, printf)
   discard usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_NONE)
   discard usrsctp_sysctl_set_sctp_ecn_enable(1)
+  trackCounter(SctpTransportTracker)
   return self
 
 proc close*(self: Sctp) {.async: (raises: [CancelledError]).} =
   # TODO: close every connections
+  untrackCounter(SctpTransportTracker)
   discard self.usrsctpAwait usrsctp_finish()
 
 proc readLoopProc(res: SctpConn) {.async: (raises: [CancelledError, WebRtcError]).} =
@@ -171,6 +174,7 @@ proc accept*(
     await conn.close()
 
   self.connections[conn.raddr] = conn
+  trackCounter(SctpConnTracker)
   return conn
 
 proc listen*(self: Sctp, sctpPort: uint16 = 5000) =
@@ -227,4 +231,5 @@ proc connect*(
   if conn.state == SctpState.SctpClosed:
     raise newException(WebRtcError, "SCTP - Connection failed")
   self.connections[raddr] = conn
+  trackCounter(SctpConnTracker)
   return conn
