@@ -9,7 +9,9 @@
 
 import binary_serialization
 
-proc sctpStrerror*(error: int): cstring {.importc: "strerror", cdecl, header: "<string.h>".}
+proc sctpStrerror*(
+  error: int
+): cstring {.importc: "strerror", cdecl, header: "<string.h>".}
 
 type
   # These three objects are used for debugging/trace only
@@ -18,11 +20,13 @@ type
     flag*: uint8
     length* {.bin_value: it.data.len() + 4.}: uint16
     data* {.bin_len: it.length - 4.}: seq[byte]
+
   SctpPacketHeader* = object
     srcPort*: uint16
     dstPort*: uint16
     verifTag*: uint32
     checksum*: uint32
+
   SctpPacketStructure* = object
     header*: SctpPacketHeader
     chunks*: seq[SctpChunk]
@@ -55,7 +59,7 @@ proc getSctpPacket*(buffer: seq[byte]): SctpPacketStructure =
   result.header = Binary.decode(buffer, SctpPacketHeader)
   var size = sizeof(SctpPacketHeader)
   while size < buffer.len:
-    let chunk = Binary.decode(buffer[size..^1], SctpChunk)
+    let chunk = Binary.decode(buffer[size ..^ 1], SctpChunk)
     result.chunks.add(chunk)
     size.inc(chunk.length.int)
     while size mod 4 != 0:
@@ -70,8 +74,10 @@ template usrsctpAwait*(self: untyped, body: untyped): untyped =
   self.sentFuture = nil
   when type(body) is void:
     (body)
-    if self.sentFuture != nil: await self.sentFuture
+    if self.sentFuture != nil:
+      await self.sentFuture
   else:
     let res = (body)
-    if self.sentFuture != nil: await self.sentFuture
+    if self.sentFuture != nil:
+      await self.sentFuture
     res

@@ -8,11 +8,9 @@
 # those terms.
 
 import tables, bitops, posix, strutils
-import chronos, chronicles
-import usrsctp
-import ../errors
-import ../dtls/[dtls_transport, dtls_connection]
-import ./[sctp_connection, sctp_utils]
+import usrsctp, chronos, chronicles
+import
+  ./[sctp_connection, sctp_utils], ../errors, ../dtls/[dtls_transport, dtls_connection]
 
 export chronicles
 
@@ -28,18 +26,19 @@ logScope:
 # - Replace doAssert by a proper exception management
 # - Find a clean way to manage SCTP ports
 
-proc printf(format: cstring) {.cdecl, importc: "printf", varargs, header: "<stdio.h>", gcsafe.}
+proc printf(
+  format: cstring
+) {.cdecl, importc: "printf", varargs, header: "<stdio.h>", gcsafe.}
 
-type
-  Sctp* = ref object
-    dtls: Dtls
-    laddr*: TransportAddress
-    connections: Table[TransportAddress, SctpConn]
-    gotConnection: AsyncEvent
-    isServer: bool
-    sockServer: ptr socket
-    pendingConnections: seq[SctpConn]
-    sentFuture: Future[void].Raising([CancelledError])
+type Sctp* = ref object
+  dtls: Dtls
+  laddr*: TransportAddress
+  connections: Table[TransportAddress, SctpConn]
+  gotConnection: AsyncEvent
+  isServer: bool
+  sockServer: ptr socket
+  pendingConnections: seq[SctpConn]
+  sentFuture: Future[void].Raising([CancelledError])
 
 const IPPROTO_SCTP = 132
 
@@ -53,7 +52,8 @@ proc handleAccept(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
     slen: Socklen = sizeof(Sockaddr_conn).uint32
   let
     sctp = cast[Sctp](data)
-    sctpSocket = usrsctp_accept(sctp.sockServer, cast[ptr SockAddr](addr sconn), addr slen)
+    sctpSocket =
+      usrsctp_accept(sctp.sockServer, cast[ptr SockAddr](addr sconn), addr slen)
     conn = cast[SctpConn](sconn.sconn_addr)
 
   if sctpSocket.isNil():
@@ -115,12 +115,12 @@ proc readLoopProc(res: SctpConn) {.async: (raises: [CancelledError, WebRtcError]
     if msg == @[]:
       trace "Sctp read loop stopped, DTLS connection closed"
       return
-    trace "Receive data", remoteAddress = res.conn.remoteAddress(), sctPacket = $(msg.getSctpPacket())
+    trace "Receive data",
+      remoteAddress = res.conn.remoteAddress(), sctPacket = $(msg.getSctpPacket())
     usrsctp_conninput(cast[pointer](res), unsafeAddr msg[0], uint(msg.len), 0)
 
 proc socketSetup(
-  conn: SctpConn,
-  callback: proc (a1: ptr socket, a2: pointer, a3: cint) {.cdecl.}
+    conn: SctpConn, callback: proc(a1: ptr socket, a2: pointer, a3: cint) {.cdecl.}
 ): bool =
   var
     errorCode = conn.sctpSocket.usrsctp_set_non_blocking(1)
@@ -137,27 +137,23 @@ proc socketSetup(
     return false
 
   errorCode = conn.sctpSocket.usrsctp_setsockopt(
-    IPPROTO_SCTP,
-    SCTP_NODELAY,
-    addr nodelay,
-    sizeof(nodelay).SockLen,
+    IPPROTO_SCTP, SCTP_NODELAY, addr nodelay, sizeof(nodelay).SockLen
   )
   if errorCode != 0:
     warn "usrsctp_setsockopt nodelay fails", error = sctpStrerror(errorCode)
     return false
 
   errorCode = conn.sctpSocket.usrsctp_setsockopt(
-    IPPROTO_SCTP,
-    SCTP_RECVRCVINFO,
-    addr recvinfo,
-    sizeof(recvinfo).SockLen,
+    IPPROTO_SCTP, SCTP_RECVRCVINFO, addr recvinfo, sizeof(recvinfo).SockLen
   )
   if errorCode != 0:
     warn "usrsctp_setsockopt recvinfo fails", error = sctpStrerror(errorCode)
     return false
   return true
 
-proc accept*(self: Sctp): Future[SctpConn] {.async: (raises: [CancelledError, WebRtcError]).} =
+proc accept*(
+    self: Sctp
+): Future[SctpConn] {.async: (raises: [CancelledError, WebRtcError]).} =
   ## Accept an Sctp Connection
   ##
   if not self.isServer:
@@ -193,18 +189,20 @@ proc listen*(self: Sctp, sctpPort: uint16 = 5000) =
   sin.sin_family = posix.AF_INET.uint16
   sin.sin_port = htons(sctpPort)
   sin.sin_addr.s_addr = htonl(INADDR_ANY)
-  doAssert 0 == usrsctp_bind(sock, cast[ptr SockAddr](addr sin), SockLen(sizeof(Sockaddr_in)))
+  doAssert 0 ==
+    usrsctp_bind(sock, cast[ptr SockAddr](addr sin), SockLen(sizeof(Sockaddr_in)))
   doAssert 0 >= usrsctp_listen(sock, 1)
   doAssert 0 == sock.usrsctp_set_upcall(handleAccept, cast[pointer](self))
   self.sockServer = sock
 
-proc connect*(self: Sctp,
-              raddr: TransportAddress,
-              sctpPort: uint16 = 5000): Future[SctpConn] {.async: (raises: [CancelledError, WebRtcError]).} =
+proc connect*(
+    self: Sctp, raddr: TransportAddress, sctpPort: uint16 = 5000
+): Future[SctpConn] {.async: (raises: [CancelledError, WebRtcError]).} =
   trace "Create Connection", raddr
   let conn = SctpConn.new(await self.dtls.connect(raddr))
   conn.state = SctpState.SctpConnecting
-  conn.sctpSocket = usrsctp_socket(AF_CONN, posix.SOCK_STREAM, IPPROTO_SCTP, nil, nil, 0, nil)
+  conn.sctpSocket =
+    usrsctp_socket(AF_CONN, posix.SOCK_STREAM, IPPROTO_SCTP, nil, nil, 0, nil)
 
   if not conn.socketSetup(handleConnect):
     raise newException(WebRtcError, "SCTP - Socket setup failed while connecting")
@@ -217,9 +215,12 @@ proc connect*(self: Sctp,
   conn.readLoop = conn.readLoopProc()
 
   let connErr = self.usrsctpAwait:
-    conn.sctpSocket.usrsctp_connect(cast[ptr SockAddr](addr sconn), SockLen(sizeof(sconn)))
+    conn.sctpSocket.usrsctp_connect(
+      cast[ptr SockAddr](addr sconn), SockLen(sizeof(sconn))
+    )
   if connErr != 0 and errno != posix.EINPROGRESS:
-    raise newException(WebRtcError, "SCTP - Connection failed " & $(sctpStrerror(errno)))
+    raise
+      newException(WebRtcError, "SCTP - Connection failed " & $(sctpStrerror(errno)))
 
   conn.connectEvent.clear()
   await conn.connectEvent.wait()

@@ -8,11 +8,8 @@
 # those terms.
 
 import posix, bitops, sequtils
-import chronos, chronicles, stew/[ptrops, endians2, byteutils]
-import usrsctp
-import ./sctp_utils
-import ../errors
-import ../dtls/dtls_connection
+import usrsctp, chronos, chronicles, stew/[ptrops, endians2, byteutils]
+import ./sctp_utils, ../errors, ../dtls/dtls_connection
 
 logScope:
   topics = "webrtc sctp_connection"
@@ -58,35 +55,35 @@ proc recvCallback*(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
   trace "Receive callback", events
   if bitand(events, SCTP_EVENT_READ) != 0:
     var
-      message = SctpMessage(
-        data: newSeq[byte](4096)
-      )
+      message = SctpMessage(data: newSeq[byte](4096))
       address: Sockaddr_storage
       rn: sctp_recvv_rn
       addressLen = sizeof(Sockaddr_storage).SockLen
       rnLen = sizeof(sctp_recvv_rn).SockLen
       infotype: uint
       flags: int
-    let n = sock.usrsctp_recvv(cast[pointer](addr message.data[0]),
-                               message.data.len.uint,
-                               cast[ptr SockAddr](addr address),
-                               cast[ptr SockLen](addr addressLen),
-                               cast[pointer](addr message.info),
-                               cast[ptr SockLen](addr rnLen),
-                               cast[ptr cuint](addr infotype),
-                               cast[ptr cint](addr flags))
+    let n = sock.usrsctp_recvv(
+      cast[pointer](addr message.data[0]),
+      message.data.len.uint,
+      cast[ptr SockAddr](addr address),
+      cast[ptr SockLen](addr addressLen),
+      cast[pointer](addr message.info),
+      cast[ptr SockLen](addr rnLen),
+      cast[ptr cuint](addr infotype),
+      cast[ptr cint](addr flags),
+    )
     if n < 0:
       trace "usrsctp_recvv", error = sctpStrerror(n)
       # TODO: should close
       return
     elif n > 0:
       # It might be necessary to check if infotype == SCTP_RECVV_RCVINFO
-      message.data.delete(n..<message.data.len())
+      message.data.delete(n ..< message.data.len())
       trace "message info from handle upcall", msginfo = message.info
       message.params = SctpMessageParameters(
-          protocolId: message.info.recvv_rcvinfo.rcv_ppid.swapBytes(),
-          streamId: message.info.recvv_rcvinfo.rcv_sid
-        )
+        protocolId: message.info.recvv_rcvinfo.rcv_ppid.swapBytes(),
+        streamId: message.info.recvv_rcvinfo.rcv_sid,
+      )
       if bitand(flags, MSG_NOTIFICATION) != 0:
         trace "Notification received", length = n
       else:
@@ -99,11 +96,9 @@ proc recvCallback*(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
   else:
     warn "Handle Upcall unexpected event", events
 
-proc sendCallback*(ctx: pointer,
-                   buffer: pointer,
-                   length: uint,
-                   tos: uint8,
-                   set_df: uint8): cint {.cdecl.} =
+proc sendCallback*(
+    ctx: pointer, buffer: pointer, length: uint, tos: uint8, set_df: uint8
+): cint {.cdecl.} =
   # This proc is called by usrsctp everytime usrsctp tries to send data.
   let
     sctpConn = cast[SctpConn](ctx)
@@ -115,6 +110,7 @@ proc sendCallback*(ctx: pointer,
       await sctpConn.conn.write(buf)
     except CatchableError as exc:
       trace "Send Failed", message = exc.msg
+
   sctpConn.sentFuture = testSend()
 
 proc toFlags(params: SctpMessageParameters): uint16 =
@@ -124,21 +120,23 @@ proc toFlags(params: SctpMessageParameters): uint16 =
     result = result or SCTP_UNORDERED
 
 proc new*(T: typedesc[SctpConn], conn: DtlsConn): T =
-  T(conn: conn,
+  T(
+    conn: conn,
     state: SctpConnecting,
     connectEvent: AsyncEvent(),
     acceptEvent: AsyncEvent(),
     raddr: conn.remoteAddress(),
-    dataRecv: newAsyncQueue[SctpMessage]()
-   )
+    dataRecv: newAsyncQueue[SctpMessage](),
+  )
 
 proc read*(self: SctpConn): Future[SctpMessage] {.async: (raises: [CancelledError]).} =
   # Used by DataChannel, returns SctpMessage in order to get the stream
   # and protocol ids
   return await self.dataRecv.popFirst()
 
-proc write*(self: SctpConn, buf: seq[byte],
-    sendParams = default(SctpMessageParameters)) {.async: (raises: [CancelledError, WebRtcError]).} =
+proc write*(
+    self: SctpConn, buf: seq[byte], sendParams = default(SctpMessageParameters)
+) {.async: (raises: [CancelledError, WebRtcError]).} =
   # Used by DataChannel, writes buf on the Dtls connection.
   trace "Write", buf
 
@@ -148,21 +146,39 @@ proc write*(self: SctpConn, buf: seq[byte],
       # If writes is called by DataChannel, sendParams should never
       # be the default value. This split is useful for testing.
       self.usrsctpAwait:
-        self.sctpSocket.usrsctp_sendv(cast[pointer](addr cpy[0]), cpy.len().uint, nil, 0,
-                                      nil, 0, SCTP_SENDV_NOINFO.cuint, 0)
+        self.sctpSocket.usrsctp_sendv(
+          cast[pointer](addr cpy[0]),
+          cpy.len().uint,
+          nil,
+          0,
+          nil,
+          0,
+          SCTP_SENDV_NOINFO.cuint,
+          0,
+        )
     else:
       var sendInfo = sctp_sndinfo(
         snd_sid: sendParams.streamId,
         snd_ppid: sendParams.protocolId.swapBytes(),
-        snd_flags: sendParams.toFlags)
+        snd_flags: sendParams.toFlags,
+      )
       self.usrsctpAwait:
-        self.sctpSocket.usrsctp_sendv(cast[pointer](addr cpy[0]), cpy.len().uint, nil, 0,
-                                      cast[pointer](addr sendInfo), sizeof(sendInfo).SockLen,
-                                      SCTP_SENDV_SNDINFO.cuint, 0)
+        self.sctpSocket.usrsctp_sendv(
+          cast[pointer](addr cpy[0]),
+          cpy.len().uint,
+          nil,
+          0,
+          cast[pointer](addr sendInfo),
+          sizeof(sendInfo).SockLen,
+          SCTP_SENDV_SNDINFO.cuint,
+          0,
+        )
   if sendvErr < 0:
     raise newException(WebRtcError, $(sctpStrerror(sendvErr)))
 
-proc write*(self: SctpConn, s: string) {.async: (raises: [CancelledError, WebRtcError]).} =
+proc write*(
+    self: SctpConn, s: string
+) {.async: (raises: [CancelledError, WebRtcError]).} =
   await self.write(s.toBytes())
 
 proc close*(self: SctpConn) {.async: (raises: [CancelledError]).} =
