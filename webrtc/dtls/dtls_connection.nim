@@ -219,7 +219,9 @@ proc close*(self: DtlsConn) {.async: (raises: [CancelledError, WebRtcError]).} =
   untrackCounter(DtlsConnTracker)
   self.closeEvent.fire()
 
-proc write*(self: DtlsConn, msg: seq[byte]) {.async.} =
+proc write*(
+    self: DtlsConn, msg: seq[byte]
+) {.async: (raises: [CancelledError, WebRtcError]).} =
   ## Write a message using mbedtls_ssl_write
   ##
   # Mbed-TLS will wrap the message properly and call `dtlsSend` callback.
@@ -237,9 +239,11 @@ proc write*(self: DtlsConn, msg: seq[byte]) {.async.} =
     trace "Dtls write", msgLen = msg.len(), actuallyWrote = write
   except MbedTLSError as exc:
     trace "Dtls write error", errorMsg = exc.msg
-    raise exc
+    raise newException(WebRtcError, "DTLS - " & exc.msg, exc)
 
-proc read*(self: DtlsConn): Future[seq[byte]] {.async.} =
+proc read*(
+    self: DtlsConn
+): Future[seq[byte]] {.async: (raises: [CancelledError, WebRtcError]).} =
   ## Read the next received message by StunConn.
   ## Uncypher it using mbedtls_ssl_read.
   ##
