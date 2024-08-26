@@ -7,13 +7,14 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import tables, bitops, posix, strutils
+import tables, bitops, nativesockets, strutils
 import usrsctp, chronos, chronicles
 import
   ./[sctp_connection, sctp_utils], ../errors, ../dtls/[dtls_transport, dtls_connection]
 
 export chronicles
 
+var errno {.importc, header: "<errno.h>".}: cint ## error variable
 const
   SctpTransportTracker* = "webrtc.sctp.transport"
   IPPROTO_SCTP = 132
@@ -186,11 +187,11 @@ proc listen*(self: Sctp, sctpPort: uint16 = 5000) =
   doAssert 0 == usrsctp_sysctl_set_sctp_blackhole(2)
   doAssert 0 == usrsctp_sysctl_set_sctp_no_csum_on_loopback(0)
   doAssert 0 == usrsctp_sysctl_set_sctp_delayed_sack_time_default(0)
-  let sock = usrsctp_socket(AF_CONN, posix.SOCK_STREAM, IPPROTO_SCTP, nil, nil, 0, nil)
+  let sock = usrsctp_socket(AF_CONN, SOCK_STREAM.toInt(), IPPROTO_SCTP, nil, nil, 0, nil)
   var on: int = 1
   doAssert 0 == usrsctp_set_non_blocking(sock, 1)
   var sin: Sockaddr_in
-  sin.sin_family = posix.AF_INET.uint16
+  sin.sin_family = AF_INET.uint16
   sin.sin_port = htons(sctpPort)
   sin.sin_addr.s_addr = htonl(INADDR_ANY)
   doAssert 0 ==
@@ -206,7 +207,7 @@ proc connect*(
   let conn = SctpConn.new(await self.dtls.connect(raddr))
   conn.state = SctpState.SctpConnecting
   conn.sctpSocket =
-    usrsctp_socket(AF_CONN, posix.SOCK_STREAM, IPPROTO_SCTP, nil, nil, 0, nil)
+    usrsctp_socket(AF_CONN, SOCK_STREAM.toInt(), IPPROTO_SCTP, nil, nil, 0, nil)
 
   if not conn.socketSetup(handleConnect):
     raise newException(WebRtcError, "SCTP - Socket setup failed while connecting")
@@ -222,7 +223,7 @@ proc connect*(
     conn.sctpSocket.usrsctp_connect(
       cast[ptr SockAddr](addr sconn), SockLen(sizeof(sconn))
     )
-  if connErr != 0 and errno != posix.EINPROGRESS:
+  if connErr != 0 and errno != nativesockets.EINPROGRESS:
     raise
       newException(WebRtcError, "SCTP - Connection failed " & $(sctpStrerror(errno)))
 

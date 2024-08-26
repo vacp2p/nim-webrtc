@@ -7,7 +7,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import posix, bitops, sequtils
+import nativesockets, bitops, sequtils
 import usrsctp, chronos, chronicles, stew/[ptrops, endians2, byteutils]
 import ./sctp_utils, ../errors, ../dtls/dtls_connection
 
