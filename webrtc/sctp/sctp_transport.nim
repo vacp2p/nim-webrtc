@@ -106,7 +106,7 @@ proc new*(T: type Sctp, dtls: Dtls): T =
   self.dtls = dtls
 
   usrsctp_init_nothreads(dtls.localAddress.port.uint16, sendCallback, printf)
-  discard usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_NONE)
+  discard usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_ALL)
   discard usrsctp_sysctl_set_sctp_ecn_enable(1)
   trackCounter(SctpTransportTracker)
   return self
@@ -228,7 +228,7 @@ proc connect*(
     )
   if connErr != 0 and errno != nativesockets.EINPROGRESS:
     raise
-      newException(WebRtcError, "SCTP - Connection failed " & $(sctpStrerror(errno)))
+      newException(WebRtcError, "SCTP - Connection failed: " & $(sctpStrerror(errno)))
 
   conn.connectEvent.clear()
   await conn.connectEvent.wait()
