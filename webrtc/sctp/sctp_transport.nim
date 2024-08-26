@@ -14,10 +14,6 @@ import
 
 export chronicles
 
-when defined(windows):
-  const  = WSAEINPROGRESS
-else
-
 const
   SctpEINPROGRESS =
     when defined(windows):
