@@ -112,7 +112,7 @@ proc new*(T: type Sctp, dtls: Dtls): T =
   self.dtls = dtls
 
   usrsctp_init_nothreads(dtls.localAddress.port.uint16, sendCallback, printf)
-  discard usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_ALL)
+  discard usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_ALL.uint32)
   discard usrsctp_sysctl_set_sctp_ecn_enable(1)
   trackCounter(SctpTransportTracker)
   return self
