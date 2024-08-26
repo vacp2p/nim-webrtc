@@ -15,7 +15,7 @@ import
 export chronicles
 
 when defined(windows):
-  const EINPROGRESS = WASEINPROGRESS
+  const EINPROGRESS = WSAEINPROGRESS
 
 const
   SctpTransportTracker* = "webrtc.sctp.transport"
@@ -194,7 +194,7 @@ proc listen*(self: Sctp, sctpPort: uint16 = 5000) =
   var on: int = 1
   doAssert 0 == usrsctp_set_non_blocking(sock, 1)
   var sin: Sockaddr_in
-  sin.sin_family = AF_INET.uint16
+  sin.sin_family = type(sin.sin_family)(AF_INET)
   sin.sin_port = htons(sctpPort)
   sin.sin_addr.s_addr = htonl(INADDR_ANY)
   doAssert 0 ==
