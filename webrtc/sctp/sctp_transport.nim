@@ -75,7 +75,7 @@ proc handleConnect(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
   trace "Handle Connect", events, state = conn.state
   if conn.state == SctpState.SctpConnecting:
     if bitand(events, SCTP_EVENT_ERROR) != 0:
-      warn "Cannot connect", raddr = conn.raddr
+      warn "Cannot connect", raddr = conn.remoteAddress()
       conn.state = SctpState.SctpClosed
     elif bitand(events, SCTP_EVENT_WRITE) != 0:
       conn.state = SctpState.SctpConnected
@@ -174,7 +174,7 @@ proc accept*(
       break
     await conn.close()
 
-  self.connections[conn.raddr] = conn
+  self.connections[conn.remoteAddress()] = conn
   trackCounter(SctpConnTracker)
   return conn
 

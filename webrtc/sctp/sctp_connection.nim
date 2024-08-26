@@ -40,10 +40,14 @@ type
     connectEvent*: AsyncEvent
     acceptEvent*: AsyncEvent
     readLoop*: Future[void]
-    raddr*: TransportAddress
     sctpSocket*: ptr socket
     dataRecv*: AsyncQueue[SctpMessage]
     sentFuture*: Future[void].Raising([CancelledError])
+
+proc remoteAddress*(self: SctpConn): TransportAddress =
+  if self.conn.isNil():
+    raise newException(WebRtcError, "SCTP - Connection not set")
+  return self.conn.remoteAddress()
 
 # -- usrsctp send and receive callback --
 
@@ -103,17 +107,17 @@ proc sendCallback*(
 ): cint {.cdecl.} =
   # This proc is called by usrsctp everytime usrsctp tries to send data.
   let
-    sctpConn = cast[SctpConn](ctx)
+    conn = cast[SctpConn](ctx)
     buf = @(buffer.makeOpenArray(byte, int(length)))
   trace "sendCallback", sctpPacket = $(buf.getSctpPacket())
   proc testSend() {.async: (raises: [CancelledError]).} =
     try:
-      trace "Send To", address = sctpConn.raddr
-      await sctpConn.conn.write(buf)
+      trace "Send To", address = conn.remoteAddress()
+      await conn.conn.write(buf)
     except CatchableError as exc:
       trace "Send Failed", message = exc.msg
 
-  sctpConn.sentFuture = testSend()
+  conn.sentFuture = testSend()
 
 proc toFlags(params: SctpMessageParameters): uint16 =
   if params.endOfRecord:
@@ -127,7 +131,6 @@ proc new*(T: typedesc[SctpConn], conn: DtlsConn): T =
     state: SctpConnecting,
     connectEvent: AsyncEvent(),
     acceptEvent: AsyncEvent(),
-    raddr: conn.remoteAddress(),
     dataRecv: newAsyncQueue[SctpMessage](),
   )
 
@@ -176,7 +179,7 @@ proc write*(
           0,
         )
   if sendvErr < 0:
-    raise newException(WebRtcError, $(sctpStrerror(sendvErr)))
+    raise newException(WebRtcError, "SCTP - " & $(sctpStrerror(sendvErr)))
 
 proc write*(
     self: SctpConn, s: string
