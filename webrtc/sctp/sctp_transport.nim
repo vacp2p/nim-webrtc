@@ -14,7 +14,9 @@ import
 
 export chronicles
 
-var errno {.importc, header: "<errno.h>".}: cint ## error variable
+when defined(windows):
+  const EINPROGRESS = WASEINPROGRESS
+
 const
   SctpTransportTracker* = "webrtc.sctp.transport"
   IPPROTO_SCTP = 132
@@ -31,6 +33,7 @@ logScope:
 # - Replace doAssert by a proper exception management
 # - Find a clean way to manage SCTP ports
 
+var errno {.importc, header: "<errno.h>".}: cint ## error variable
 proc printf(
   format: cstring
 ) {.cdecl, importc: "printf", varargs, header: "<stdio.h>", gcsafe.}
