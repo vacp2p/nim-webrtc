@@ -21,36 +21,82 @@ suite "SCTP":
   teardown:
     checkLeaks()
 
+  type
+    SctpStackForTest = object
+      localAddress: TransportAddress
+      udp: UdpTransport
+      stun: Stun
+      dtls: Dtls
+      sctp: Sctp
+
+  proc initSctpStack(localAddress: TransportAddress): SctpStackForTest =
+    result.localAddress = localAddress
+    result.udp = UdpTransport.new(result.localAddress)
+    result.stun = Stun.new(result.udp)
+    result.dtls = Dtls.new(result.stun)
+    result.sctp = Sctp.new(result.dtls)
+    result.sctp.listen()
+
+  proc closeSctpStack(self: SctpStackForTest) {.async: (raises: [CancelledError]).} =
+    await self.sctp.close()
+    await self.dtls.stop()
+    await self.stun.stop()
+    await self.udp.close()
+
   asyncTest "Two SCTP nodes connecting to each other, then sending/receiving data":
+    var
+      sctpServer = initSctpStack(initTAddress("127.0.0.1:4444"))
+      sctpClient = initSctpStack(initTAddress("127.0.0.1:5555"))
     let
-      localAddr1 = initTAddress("127.0.0.1:4444")
-      localAddr2 = initTAddress("127.0.0.1:5555")
-      udp1 = UdpTransport.new(localAddr1)
-      udp2 = UdpTransport.new(localAddr2)
-      stun1 = Stun.new(udp1)
-      stun2 = Stun.new(udp2)
-      dtls1 = Dtls.new(stun1)
-      dtls2 = Dtls.new(stun2)
-      sctp1 = Sctp.new(dtls1)
-      sctp2 = Sctp.new(dtls2)
-    sctp1.listen()
-    let conn1Fut = sctp1.accept()
-    let conn2 = await sctp2.connect(localAddr1)
-    let conn1 = await conn1Fut
+      serverConnFut = sctpServer.sctp.accept()
+      clientConn = await sctpClient.sctp.connect(sctpServer.localAddress)
+      serverConn = await serverConnFut
 
-    await conn1.write(@[1'u8, 2, 3, 4])
-    check (await conn2.read()).data == @[1'u8, 2, 3, 4]
+    await clientConn.write(@[1'u8, 2, 3, 4])
+    check (await serverConn.read()).data == @[1'u8, 2, 3, 4]
 
-    await conn2.write(@[5'u8, 6, 7, 8])
-    check (await conn1.read()).data == @[5'u8, 6, 7, 8]
+    await serverConn.write(@[5'u8, 6, 7, 8])
+    check (await clientConn.read()).data == @[5'u8, 6, 7, 8]
 
-    await conn1.write(@[10'u8, 11, 12, 13])
-    await conn2.write(@[14'u8, 15, 16, 17])
-    check (await conn1.read()).data == @[14'u8, 15, 16, 17]
-    check (await conn2.read()).data == @[10'u8, 11, 12, 13]
+    await clientConn.write(@[10'u8, 11, 12, 13])
+    await serverConn.write(@[14'u8, 15, 16, 17])
+    check (await clientConn.read()).data == @[14'u8, 15, 16, 17]
+    check (await serverConn.read()).data == @[10'u8, 11, 12, 13]
 
-    await allFutures(conn1.close(), conn2.close())
-    await allFutures(sctp1.close(), sctp2.close())
-    await allFutures(dtls1.stop(), dtls2.stop())
-    await allFutures(stun1.stop(), stun2.stop())
-    await allFutures(udp1.close(), udp2.close())
+    await allFutures(clientConn.close(), serverConn.close())
+    await allFutures(sctpClient.closeSctpStack(), sctpServer.closeSctpStack())
+
+  asyncTest "Two DTLS nodes connecting to the same DTLS server, sending/receiving data":
+    var
+      sctpServer = initSctpStack(initTAddress("127.0.0.1:4444"))
+      sctpClient1 = initSctpStack(initTAddress("127.0.0.1:5555"))
+      sctpClient2 = initSctpStack(initTAddress("127.0.0.1:6666"))
+    let
+      serverConn1Fut = sctpServer.sctp.accept()
+      serverConn2Fut = sctpServer.sctp.accept()
+      clientConn1 = await sctpClient1.sctp.connect(sctpServer.localAddress)
+      clientConn2 = await sctpClient2.sctp.connect(sctpServer.localAddress)
+      serverConn1 = await serverConn1Fut
+      serverConn2 = await serverConn2Fut
+
+    await serverConn1.write(@[1'u8, 2, 3, 4])
+    await serverConn2.write(@[5'u8, 6, 7, 8])
+    await clientConn1.write(@[9'u8, 10, 11, 12])
+    await clientConn2.write(@[13'u8, 14, 15, 16])
+    check:
+      (await clientConn1.read()).data == @[1'u8, 2, 3, 4]
+      (await clientConn2.read()).data == @[5'u8, 6, 7, 8]
+      (await serverConn1.read()).data == @[9'u8, 10, 11, 12]
+      (await serverConn2.read()).data == @[13'u8, 14, 15, 16]
+    await allFutures(clientConn1.close(), serverConn1.close())
+
+    await serverConn2.write(@[5'u8, 6, 7, 8])
+    await clientConn2.write(@[13'u8, 14, 15, 16])
+    check:
+      (await clientConn2.read()).data == @[5'u8, 6, 7, 8]
+      (await serverConn2.read()).data == @[13'u8, 14, 15, 16]
+    await allFutures(clientConn2.close(), serverConn2.close())
+
+    await allFutures(sctpClient1.closeSctpStack(),
+                     sctpClient2.closeSctpStack(),
+                     sctpServer.closeSctpStack())
