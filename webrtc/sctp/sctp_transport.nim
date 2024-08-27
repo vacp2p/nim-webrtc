@@ -15,12 +15,6 @@ import
 export chronicles
 
 const
-  SctpEINPROGRESS =
-    when defined(windows):
-      import winlean
-      winlean.WSAEINPROGRESS.cint
-    else:
-      chronos.EINPROGRESS.cint
   SctpTransportTracker* = "webrtc.sctp.transport"
   IPPROTO_SCTP = 132
 
@@ -197,7 +191,7 @@ proc listen*(self: Sctp, sctpPort: uint16 = 5000) =
   var on: int = 1
   doAssert 0 == usrsctp_set_non_blocking(sock, 1)
   var sin: Sockaddr_in
-  sin.sin_family = type(sin.sin_family)(AF_INET)
+  sin.sin_family = type(sin.sin_family)(SctpAF_INET)
   sin.sin_port = htons(sctpPort)
   sin.sin_addr.s_addr = htonl(INADDR_ANY)
   doAssert 0 ==

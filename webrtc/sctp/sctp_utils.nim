@@ -7,11 +7,17 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+import nativesockets, winlean
 import binary_serialization
 
-proc sctpStrerror*(
-  error: int
-): cstring {.importc: "strerror", cdecl, header: "<string.h>".}
+when defined(windows):
+  const
+    SctpAF_INET* = winlean.AF_INET
+    SctpEINPROGRESS* = winlean.WSAEINPROGRESS.cint
+else:
+  const
+    SctpAF_INET* = nativesockets.AF_INET
+    SctpEINPROGRESS* = EINPROGRESS.cint
 
 type
   # These three objects are used for debugging/trace only
@@ -65,6 +71,10 @@ proc getSctpPacket*(buffer: seq[byte]): SctpPacketStructure =
     while size mod 4 != 0:
       # padding; could use `size.inc(-size %% 4)` instead but it lacks clarity
       size.inc(1)
+
+proc sctpStrerror*(
+  error: int
+): cstring {.importc: "strerror", cdecl, header: "<string.h>".}
 
 template usrsctpAwait*(self: untyped, body: untyped): untyped =
   # usrsctpAwait is template which set `sentFuture` to nil then calls (usually)
