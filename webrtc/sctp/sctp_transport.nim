@@ -17,7 +17,8 @@ export chronicles
 const
   SctpEINPROGRESS =
     when defined(windows):
-      chronos.WSAEINPROGRESS.cint
+      import winlean
+      winlean.WSAEINPROGRESS.cint
     else:
       chronos.EINPROGRESS.cint
   SctpTransportTracker* = "webrtc.sctp.transport"
