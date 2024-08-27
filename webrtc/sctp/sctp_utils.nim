@@ -8,7 +8,7 @@
 # those terms.
 
 import nativesockets, winlean
-import binary_serialization
+import binary_serialization, chronos
 
 when defined(windows):
   const
@@ -17,7 +17,7 @@ when defined(windows):
 else:
   const
     SctpAF_INET* = nativesockets.AF_INET
-    SctpEINPROGRESS* = EINPROGRESS.cint
+    SctpEINPROGRESS* = chronos.EINPROGRESS.cint
 
 type
   # These three objects are used for debugging/trace only
