@@ -15,11 +15,6 @@ import
 export chronicles
 
 const
-  SctpEINPROGRESS =
-    when defined(windows):
-      WSAEINPROGRESS
-    else:
-      nativesockets.EINPROGRESS
   SctpTransportTracker* = "webrtc.sctp.transport"
   IPPROTO_SCTP = 132
 
@@ -228,7 +223,7 @@ proc connect*(
     conn.sctpSocket.usrsctp_connect(
       cast[ptr SockAddr](addr sconn), SockLen(sizeof(sconn))
     )
-  if connErr != 0 and errno != SctpEINPROGRESS:
+  if connErr != 0 and errno != chronos.EINPROGRESS.cint:
     raise
       newException(WebRtcError, "SCTP - Connection failed: " & $(sctpStrerror(errno)))
 
