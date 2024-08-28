@@ -18,6 +18,8 @@ const
   SctpTransportTracker* = "webrtc.sctp.transport"
   IPPROTO_SCTP = 132
 
+var numberOfInitializedSctp = 0
+
 logScope:
   topics = "webrtc sctp"
 
@@ -97,12 +99,36 @@ proc stopServer*(self: Sctp) =
     pc.sctpSocket.usrsctp_close()
   self.sockServer.usrsctp_close()
 
+proc listen*(self: Sctp, sctpPort: uint16 = 5000) =
+  if self.isServer:
+    trace "Try to start the server twice"
+    return
+  self.isServer = true
+  trace "Listening", sctpPort
+  doAssert 0 == usrsctp_sysctl_set_sctp_blackhole(2)
+  doAssert 0 == usrsctp_sysctl_set_sctp_no_csum_on_loopback(0)
+  doAssert 0 == usrsctp_sysctl_set_sctp_delayed_sack_time_default(0)
+  let sock = usrsctp_socket(AF_CONN, SOCK_STREAM.toInt(), IPPROTO_SCTP, nil, nil, 0, nil)
+  var on: int = 1
+  doAssert 0 == usrsctp_set_non_blocking(sock, 1)
+  var sin: Sockaddr_in
+  sin.sin_family = type(sin.sin_family)(SctpAF_INET)
+  sin.sin_port = htons(sctpPort)
+  sin.sin_addr.s_addr = htonl(INADDR_ANY)
+  doAssert 0 ==
+    usrsctp_bind(sock, cast[ptr SockAddr](addr sin), SockLen(sizeof(Sockaddr_in)))
+  doAssert 0 >= usrsctp_listen(sock, 1)
+  doAssert 0 == sock.usrsctp_set_upcall(handleAccept, cast[pointer](self))
+  self.sockServer = sock
+
 proc new*(T: type Sctp, dtls: Dtls): T =
   var self = T()
   self.gotConnection = newAsyncEvent()
   self.dtls = dtls
 
-  usrsctp_init_nothreads(dtls.localAddress.port.uint16, sendCallback, printf)
+  if numberOfInitializedSctp <= 0:
+    usrsctp_init_nothreads(dtls.localAddress.port.uint16, sendCallback, printf)
+    numberOfInitializedSctp += 1
   discard usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_ALL.uint32)
   discard usrsctp_sysctl_set_sctp_ecn_enable(1)
   trackCounter(SctpTransportTracker)
@@ -111,7 +137,9 @@ proc new*(T: type Sctp, dtls: Dtls): T =
 proc close*(self: Sctp) {.async: (raises: [CancelledError]).} =
   # TODO: close every connections
   untrackCounter(SctpTransportTracker)
-  discard self.usrsctpAwait usrsctp_finish()
+  numberOfInitializedSctp -= 1
+  if numberOfInitializedSctp == 0:
+    discard self.usrsctpAwait usrsctp_finish()
 
 proc readLoopProc(res: SctpConn) {.async: (raises: [CancelledError, WebRtcError]).} =
   while true:
@@ -177,28 +205,6 @@ proc accept*(
   self.connections[conn.remoteAddress()] = conn
   trackCounter(SctpConnTracker)
   return conn
-
-proc listen*(self: Sctp, sctpPort: uint16 = 5000) =
-  if self.isServer:
-    trace "Try to start the server twice"
-    return
-  self.isServer = true
-  trace "Listening", sctpPort
-  doAssert 0 == usrsctp_sysctl_set_sctp_blackhole(2)
-  doAssert 0 == usrsctp_sysctl_set_sctp_no_csum_on_loopback(0)
-  doAssert 0 == usrsctp_sysctl_set_sctp_delayed_sack_time_default(0)
-  let sock = usrsctp_socket(AF_CONN, SOCK_STREAM.toInt(), IPPROTO_SCTP, nil, nil, 0, nil)
-  var on: int = 1
-  doAssert 0 == usrsctp_set_non_blocking(sock, 1)
-  var sin: Sockaddr_in
-  sin.sin_family = type(sin.sin_family)(SctpAF_INET)
-  sin.sin_port = htons(sctpPort)
-  sin.sin_addr.s_addr = htonl(INADDR_ANY)
-  doAssert 0 ==
-    usrsctp_bind(sock, cast[ptr SockAddr](addr sin), SockLen(sizeof(Sockaddr_in)))
-  doAssert 0 >= usrsctp_listen(sock, 1)
-  doAssert 0 == sock.usrsctp_set_upcall(handleAccept, cast[pointer](self))
-  self.sockServer = sock
 
 proc connect*(
     self: Sctp, raddr: TransportAddress, sctpPort: uint16 = 5000
