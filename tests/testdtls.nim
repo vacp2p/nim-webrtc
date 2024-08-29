@@ -82,7 +82,8 @@ suite "DTLS":
     await allFutures(stun1.stop(), stun2.stop(), stun3.stop())
     await allFutures(udp1.close(), udp2.close(), udp3.close())
 
-  asyncTest "Two DTLS nodes connecting to each other, disconnecting and reconnecting":
+  asyncTest "Two DTLS nodes connecting to each other, closing the created connections then re-connect the nodes":
+    # Related to https://github.com/vacp2p/nim-webrtc/pull/22
     let
       localAddr1 = initTAddress("127.0.0.1:4444")
       localAddr2 = initTAddress("127.0.0.1:5555")
@@ -93,26 +94,27 @@ suite "DTLS":
       dtls1 = Dtls.new(stun1)
       dtls2 = Dtls.new(stun2)
     var
-      conn1Fut = dtls1.accept()
-      conn2 = await dtls2.connect(localAddr1)
-      conn1 = await conn1Fut
+      serverConnFut = dtls1.accept()
+      clientConn = await dtls2.connect(localAddr1)
+      serverConn = await serverConnFut
 
-    await conn1.write(@[1'u8, 2, 3, 4])
-    await conn2.write(@[5'u8, 6, 7, 8])
-    check (await conn1.read()) == @[5'u8, 6, 7, 8]
-    check (await conn2.read()) == @[1'u8, 2, 3, 4]
-    await allFutures(conn1.close(), conn2.close())
+    await serverConn.write(@[1'u8, 2, 3, 4])
+    await clientConn.write(@[5'u8, 6, 7, 8])
+    check (await serverConn.read()) == @[5'u8, 6, 7, 8]
+    check (await clientConn.read()) == @[1'u8, 2, 3, 4]
+    await allFutures(serverConn.close(), clientConn.close())
+    check serverConn.closed and clientConn.closed
 
-    conn1Fut = dtls1.accept()
-    conn2 = await dtls2.connect(localAddr1)
-    conn1 = await conn1Fut
+    serverConnFut = dtls1.accept()
+    clientConn = await dtls2.connect(localAddr1)
+    serverConn = await serverConnFut
 
-    await conn1.write(@[5'u8, 6, 7, 8])
-    await conn2.write(@[1'u8, 2, 3, 4])
-    check (await conn1.read()) == @[1'u8, 2, 3, 4]
-    check (await conn2.read()) == @[5'u8, 6, 7, 8]
+    await serverConn.write(@[5'u8, 6, 7, 8])
+    await clientConn.write(@[1'u8, 2, 3, 4])
+    check (await serverConn.read()) == @[1'u8, 2, 3, 4]
+    check (await clientConn.read()) == @[5'u8, 6, 7, 8]
 
-    await allFutures(conn1.close(), conn2.close())
+    await allFutures(serverConn.close(), clientConn.close())
     await allFutures(dtls1.stop(), dtls2.stop())
     await allFutures(stun1.stop(), stun2.stop())
     await allFutures(udp1.close(), udp2.close())
