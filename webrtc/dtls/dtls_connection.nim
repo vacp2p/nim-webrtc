@@ -21,6 +21,8 @@ logScope:
 const DtlsConnTracker* = "webrtc.dtls.conn"
 
 type
+  DtlsConnCleanup* = proc() {.raises: [], gcsafe.}
+
   MbedTLSCtx = object
     ssl: mbedtls_ssl_context
     config: mbedtls_ssl_config
@@ -44,6 +46,7 @@ type
     # Close connection management
     closed: bool
     closeEvent: AsyncEvent
+    cleanup*: DtlsConnCleanup
 
     # Local and Remote certificate, needed by wrapped protocol DataChannel
     # and by libp2p
@@ -217,6 +220,10 @@ proc close*(self: DtlsConn) {.async: (raises: [CancelledError, WebRtcError]).} =
     await self.conn.write(self.dataToSend)
   self.dataToSend = @[]
   untrackCounter(DtlsConnTracker)
+  await self.conn.close()
+  if not self.cleanup.isNil():
+    self.cleanup()
+    self.cleanup = nil
   self.closeEvent.fire()
 
 proc write*(

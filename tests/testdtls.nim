@@ -81,3 +81,38 @@ suite "DTLS":
     await allFutures(dtls1.stop(), dtls2.stop(), dtls3.stop())
     await allFutures(stun1.stop(), stun2.stop(), stun3.stop())
     await allFutures(udp1.close(), udp2.close(), udp3.close())
+
+  asyncTest "Two DTLS nodes connecting to each other, disconnecting and reconnecting":
+    let
+      localAddr1 = initTAddress("127.0.0.1:4444")
+      localAddr2 = initTAddress("127.0.0.1:5555")
+      udp1 = UdpTransport.new(localAddr1)
+      udp2 = UdpTransport.new(localAddr2)
+      stun1 = Stun.new(udp1)
+      stun2 = Stun.new(udp2)
+      dtls1 = Dtls.new(stun1)
+      dtls2 = Dtls.new(stun2)
+    var
+      conn1Fut = dtls1.accept()
+      conn2 = await dtls2.connect(localAddr1)
+      conn1 = await conn1Fut
+
+    await conn1.write(@[1'u8, 2, 3, 4])
+    await conn2.write(@[5'u8, 6, 7, 8])
+    check (await conn1.read()) == @[5'u8, 6, 7, 8]
+    check (await conn2.read()) == @[1'u8, 2, 3, 4]
+    await allFutures(conn1.close(), conn2.close())
+
+    conn1Fut = dtls1.accept()
+    conn2 = await dtls2.connect(localAddr1)
+    conn1 = await conn1Fut
+
+    await conn1.write(@[5'u8, 6, 7, 8])
+    await conn2.write(@[1'u8, 2, 3, 4])
+    check (await conn1.read()) == @[1'u8, 2, 3, 4]
+    check (await conn2.read()) == @[5'u8, 6, 7, 8]
+
+    await allFutures(conn1.close(), conn2.close())
+    await allFutures(dtls1.stop(), dtls2.stop())
+    await allFutures(stun1.stop(), stun2.stop())
+    await allFutures(udp1.close(), udp2.close())

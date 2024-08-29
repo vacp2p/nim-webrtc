@@ -28,6 +28,7 @@ type
   StunUsernameProvider* = proc(): string {.raises: [], gcsafe.}
   StunUsernameChecker* = proc(username: seq[byte]): bool {.raises: [], gcsafe.}
   StunPasswordProvider* = proc(username: seq[byte]): seq[byte] {.raises: [], gcsafe.}
+  StunConnCleanup* = proc() {.raises: [], gcsafe.}
 
   StunConn* = ref object
     udp*: UdpTransport # The wrapper protocol: UDP Transport
@@ -37,8 +38,11 @@ type
     stunMsgs*: AsyncQueue[seq[byte]] # stun messages received and to be
                                      # processed by the stun message handler
     handlesFut*: Future[void] # Stun Message handler
+
+    # Close connection management
     closeEvent: AsyncEvent
     closed*: bool
+    cleanup*: StunConnCleanup
 
     # Is ice-controlling and iceTiebreaker, not fully implemented yet.
     iceControlling: bool
@@ -227,6 +231,9 @@ proc close*(self: StunConn) {.async: (raises: []).} =
     debug "Try to close an already closed StunConn"
     return
   await self.handlesFut.cancelAndWait()
+  if not self.cleanup.isNil():
+    self.cleanup()
+    self.cleanup = nil
   self.closeEvent.fire()
   self.closed = true
   untrackCounter(StunConnectionTracker)
