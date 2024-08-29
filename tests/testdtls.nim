@@ -103,7 +103,7 @@ suite "DTLS":
     check (await serverConn.read()) == @[5'u8, 6, 7, 8]
     check (await clientConn.read()) == @[1'u8, 2, 3, 4]
     await allFutures(serverConn.close(), clientConn.close())
-    check serverConn.closed and clientConn.closed
+    check serverConn.isClosed() and clientConn.isClosed()
 
     serverConnFut = dtls1.accept()
     clientConn = await dtls2.connect(localAddr1)

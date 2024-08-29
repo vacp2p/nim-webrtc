@@ -56,6 +56,9 @@ type
     # Mbed-TLS contexts
     ctx: MbedTLSCtx
 
+proc isClosed*(self: DtlsConn): bool =
+  return self.closed
+
 proc getRemoteCertificateCallback(
     ctx: pointer, pcert: ptr mbedtls_x509_crt, state: cint, pflags: ptr uint32
 ): cint {.cdecl.} =
