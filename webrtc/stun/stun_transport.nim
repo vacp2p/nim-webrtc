@@ -36,7 +36,7 @@ proc addConnToTable(self: Stun, conn: StunConn) =
   proc cleanup() =
     self.connections.del(conn.raddr)
   self.connections[conn.raddr] = conn
-  conn.cleanup = cleanup
+  conn.addOnClose(cleanup)
 
 proc accept*(self: Stun): Future[StunConn] {.async: (raises: [CancelledError]).} =
   ## Accept a Stun Connection

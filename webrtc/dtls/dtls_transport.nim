@@ -83,7 +83,7 @@ proc addConnToTable(self: Dtls, conn: DtlsConn) =
   proc cleanup() =
     self.connections.del(conn.remoteAddress())
   self.connections[conn.remoteAddress()] = conn
-  conn.cleanup = cleanup
+  conn.addOnClose(cleanup)
 
 proc accept*(
     self: Dtls

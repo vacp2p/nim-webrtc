@@ -28,7 +28,7 @@ type
   StunUsernameProvider* = proc(): string {.raises: [], gcsafe.}
   StunUsernameChecker* = proc(username: seq[byte]): bool {.raises: [], gcsafe.}
   StunPasswordProvider* = proc(username: seq[byte]): seq[byte] {.raises: [], gcsafe.}
-  StunConnCleanup* = proc() {.raises: [], gcsafe.}
+  StunConnOnClose* = proc() {.raises: [], gcsafe.}
 
   StunConn* = ref object
     udp*: UdpTransport # The wrapper protocol: UDP Transport
@@ -40,9 +40,8 @@ type
     handlesFut*: Future[void] # Stun Message handler
 
     # Close connection management
-    closeEvent: AsyncEvent
     closed*: bool
-    cleanup*: StunConnCleanup
+    onClose: seq[StunConnOnClose]
 
     # Is ice-controlling and iceTiebreaker, not fully implemented yet.
     iceControlling: bool
@@ -205,7 +204,6 @@ proc new*(
     laddr: udp.laddr,
     raddr: raddr,
     closed: false,
-    closeEvent: newAsyncEvent(),
     dataRecv: newAsyncQueue[seq[byte]](StunMaxQueuingMessages),
     stunMsgs: newAsyncQueue[seq[byte]](StunMaxQueuingMessages),
     iceControlling: iceControlling,
@@ -219,10 +217,10 @@ proc new*(
   trackCounter(StunConnectionTracker)
   return self
 
-proc join*(self: StunConn) {.async: (raises: [CancelledError]).} =
-  ## Wait for the Stun Connection to be closed
+proc addOnClose*(self: StunConn, onCloseProc: StunConnOnClose) =
+  ## Adds a proc to be called when StunConn is closed
   ##
-  await self.closeEvent.wait()
+  self.onClose.add(onCloseProc)
 
 proc close*(self: StunConn) {.async: (raises: []).} =
   ## Close a Stun Connection
@@ -231,10 +229,9 @@ proc close*(self: StunConn) {.async: (raises: []).} =
     debug "Try to close an already closed StunConn"
     return
   await self.handlesFut.cancelAndWait()
-  if not self.cleanup.isNil():
-    self.cleanup()
-    self.cleanup = nil
-  self.closeEvent.fire()
+  for onCloseProc in self.onClose:
+    onCloseProc()
+  self.onClose = @[]
   self.closed = true
   untrackCounter(StunConnectionTracker)
 
