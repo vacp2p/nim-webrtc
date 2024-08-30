@@ -7,10 +7,11 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import nativesockets, winlean
+import nativesockets
 import binary_serialization, chronos
 
 when defined(windows):
+  import winlean
   const
     SctpAF_INET* = winlean.AF_INET
     SctpEINPROGRESS* = winlean.WSAEINPROGRESS.cint

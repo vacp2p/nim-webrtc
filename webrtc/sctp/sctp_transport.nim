@@ -18,8 +18,6 @@ const
   SctpTransportTracker* = "webrtc.sctp.transport"
   IPPROTO_SCTP = 132
 
-var numberOfInitializedSctp = 0
-
 logScope:
   topics = "webrtc sctp"
 
@@ -126,9 +124,7 @@ proc new*(T: type Sctp, dtls: Dtls): T =
   self.gotConnection = newAsyncEvent()
   self.dtls = dtls
 
-  if numberOfInitializedSctp <= 0:
-    usrsctp_init_nothreads(dtls.localAddress.port.uint16, sendCallback, printf)
-    numberOfInitializedSctp += 1
+  usrsctp_init_nothreads(dtls.localAddress.port.uint16, sendCallback, printf)
   discard usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_ALL.uint32)
   discard usrsctp_sysctl_set_sctp_ecn_enable(1)
   trackCounter(SctpTransportTracker)
@@ -137,9 +133,7 @@ proc new*(T: type Sctp, dtls: Dtls): T =
 proc close*(self: Sctp) {.async: (raises: [CancelledError]).} =
   # TODO: close every connections
   untrackCounter(SctpTransportTracker)
-  numberOfInitializedSctp -= 1
-  if numberOfInitializedSctp == 0:
-    discard self.usrsctpAwait usrsctp_finish()
+  discard self.usrsctpAwait usrsctp_finish()
 
 proc readLoopProc(res: SctpConn) {.async: (raises: [CancelledError, WebRtcError]).} =
   while true:

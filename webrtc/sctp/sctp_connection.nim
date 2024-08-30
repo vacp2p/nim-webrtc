@@ -186,8 +186,9 @@ proc write*(
 ) {.async: (raises: [CancelledError, WebRtcError]).} =
   await self.write(s.toBytes())
 
-proc close*(self: SctpConn) {.async: (raises: [CancelledError]).} =
+proc close*(self: SctpConn) {.async: (raises: [CancelledError, WebRtcError]).} =
   self.usrsctpAwait:
     self.sctpSocket.usrsctp_close()
+  await self.conn.close()
   usrsctp_deregister_address(cast[pointer](self))
   untrackCounter(SctpConnTracker)
