@@ -81,3 +81,40 @@ suite "DTLS":
     await allFutures(dtls1.stop(), dtls2.stop(), dtls3.stop())
     await allFutures(stun1.stop(), stun2.stop(), stun3.stop())
     await allFutures(udp1.close(), udp2.close(), udp3.close())
+
+  asyncTest "Two DTLS nodes connecting to each other, closing the created connections then re-connect the nodes":
+    # Related to https://github.com/vacp2p/nim-webrtc/pull/22
+    let
+      localAddr1 = initTAddress("127.0.0.1:4444")
+      localAddr2 = initTAddress("127.0.0.1:5555")
+      udp1 = UdpTransport.new(localAddr1)
+      udp2 = UdpTransport.new(localAddr2)
+      stun1 = Stun.new(udp1)
+      stun2 = Stun.new(udp2)
+      dtls1 = Dtls.new(stun1)
+      dtls2 = Dtls.new(stun2)
+    var
+      serverConnFut = dtls1.accept()
+      clientConn = await dtls2.connect(localAddr1)
+      serverConn = await serverConnFut
+
+    await serverConn.write(@[1'u8, 2, 3, 4])
+    await clientConn.write(@[5'u8, 6, 7, 8])
+    check (await serverConn.read()) == @[5'u8, 6, 7, 8]
+    check (await clientConn.read()) == @[1'u8, 2, 3, 4]
+    await allFutures(serverConn.close(), clientConn.close())
+    check serverConn.isClosed() and clientConn.isClosed()
+
+    serverConnFut = dtls1.accept()
+    clientConn = await dtls2.connect(localAddr1)
+    serverConn = await serverConnFut
+
+    await serverConn.write(@[5'u8, 6, 7, 8])
+    await clientConn.write(@[1'u8, 2, 3, 4])
+    check (await serverConn.read()) == @[1'u8, 2, 3, 4]
+    check (await clientConn.read()) == @[5'u8, 6, 7, 8]
+
+    await allFutures(serverConn.close(), clientConn.close())
+    await allFutures(dtls1.stop(), dtls2.stop())
+    await allFutures(stun1.stop(), stun2.stop())
+    await allFutures(udp1.close(), udp2.close())
