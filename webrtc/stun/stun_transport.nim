@@ -32,6 +32,12 @@ type
 
     rng: ref HmacDrbgContext
 
+proc addConnToTable(self: Stun, conn: StunConn) =
+  proc cleanup() =
+    self.connections.del(conn.raddr)
+  self.connections[conn.raddr] = conn
+  conn.addOnClose(cleanup)
+
 proc accept*(self: Stun): Future[StunConn] {.async: (raises: [CancelledError]).} =
   ## Accept a Stun Connection
   ##
@@ -53,16 +59,8 @@ proc connect*(
   do:
     let res = StunConn.new(self.udp, raddr, false, self.usernameProvider,
       self.usernameChecker, self.passwordProvider, self.rng)
-    self.connections[raddr] = res
+    self.addConnToTable(res)
     return res
-
-proc cleanupStunConn(self: Stun, conn: StunConn) {.async: (raises: []).} =
-  # Waiting for a connection to be closed to remove it from the table
-  try:
-    await conn.join()
-    self.connections.del(conn.raddr)
-  except CancelledError as exc:
-    warn "Error cleaning up Stun Connection", error=exc.msg
 
 proc stunReadLoop(self: Stun) {.async: (raises: [CancelledError]).} =
   while true:
@@ -71,9 +69,8 @@ proc stunReadLoop(self: Stun) {.async: (raises: [CancelledError]).} =
     if not self.connections.hasKey(raddr):
       stunConn = StunConn.new(self.udp, raddr, true, self.usernameProvider,
         self.usernameChecker, self.passwordProvider, self.rng)
-      self.connections[raddr] = stunConn
+      self.addConnToTable(stunConn)
       await self.pendingConn.addLast(stunConn)
-      asyncSpawn self.cleanupStunConn(stunConn)
     else:
       try:
         stunConn = self.connections[raddr]

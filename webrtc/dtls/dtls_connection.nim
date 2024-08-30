@@ -21,6 +21,8 @@ logScope:
 const DtlsConnTracker* = "webrtc.dtls.conn"
 
 type
+  DtlsConnOnClose* = proc() {.raises: [], gcsafe.}
+
   MbedTLSCtx = object
     ssl: mbedtls_ssl_context
     config: mbedtls_ssl_config
@@ -34,7 +36,7 @@ type
   DtlsConn* = ref object
     # DtlsConn is a Dtls connection receiving and sending data using
     # the underlying Stun Connection
-    conn*: StunConn # The wrapper protocol Stun Connection
+    conn: StunConn # The wrapper protocol Stun Connection
     raddr: TransportAddress # Remote address
     dataRecv: seq[byte] # data received which will be read by SCTP
     dataToSend: seq[byte]
@@ -43,7 +45,7 @@ type
 
     # Close connection management
     closed: bool
-    closeEvent: AsyncEvent
+    onClose: seq[DtlsConnOnClose]
 
     # Local and Remote certificate, needed by wrapped protocol DataChannel
     # and by libp2p
@@ -52,6 +54,9 @@ type
 
     # Mbed-TLS contexts
     ctx: MbedTLSCtx
+
+proc isClosed*(self: DtlsConn): bool =
+  return self.closed
 
 proc getRemoteCertificateCallback(
     ctx: pointer, pcert: ptr mbedtls_x509_crt, state: cint, pflags: ptr uint32
@@ -100,7 +105,6 @@ proc new*(T: type DtlsConn, conn: StunConn): T =
   var self = T(conn: conn)
   self.raddr = conn.raddr
   self.closed = false
-  self.closeEvent = newAsyncEvent()
   return self
 
 proc dtlsConnInit(self: DtlsConn) =
@@ -160,10 +164,10 @@ proc connectInit*(self: DtlsConn, ctr_drbg: mbedtls_ctr_drbg_context) =
   except MbedTLSError as exc:
     raise newException(WebRtcError, "DTLS - Connect initialization: " & exc.msg, exc)
 
-proc join*(self: DtlsConn) {.async: (raises: [CancelledError]).} =
-  ## Wait for the Dtls Connection to be closed
+proc addOnClose*(self: DtlsConn, onCloseProc: DtlsConnOnClose) =
+  ## Adds a proc to be called when DtlsConn is closed
   ##
-  await self.closeEvent.wait()
+  self.onClose.add(onCloseProc)
 
 proc dtlsHandshake*(
     self: DtlsConn, isServer: bool
@@ -217,7 +221,10 @@ proc close*(self: DtlsConn) {.async: (raises: [CancelledError, WebRtcError]).} =
     await self.conn.write(self.dataToSend)
   self.dataToSend = @[]
   untrackCounter(DtlsConnTracker)
-  self.closeEvent.fire()
+  await self.conn.close()
+  for onCloseProc in self.onClose:
+    onCloseProc()
+  self.onClose = @[]
 
 proc write*(
     self: DtlsConn, msg: seq[byte]
