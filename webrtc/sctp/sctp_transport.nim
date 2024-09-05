@@ -228,7 +228,7 @@ proc connect*(
     )
   if connErr != 0 and errno != SctpEINPROGRESS:
     raise
-      newException(WebRtcError, "SCTP - Connection failed: " & $(sctpStrerror(errno)))
+      newException(WebRtcError, "SCTP - Connection failed: " & $(sctpStrerror(errno)) & $errno)
 
   conn.connectEvent.clear()
   await conn.connectEvent.wait()
