@@ -24,7 +24,7 @@ var cfg =
   " --threads:on --opt:speed"
 
 when defined(windows):
-  cfg = cfg & " --clib:ws2_32"
+  cfg = cfg & " --clib:ws2_32 --clib:iphlpapi"
 
 import hashes
 
