@@ -10,6 +10,8 @@
 import nativesockets
 import binary_serialization, chronos
 
+var errno* {.importc, header: "<errno.h>".}: cint ## error variable
+
 when defined(windows):
   import winlean
   const

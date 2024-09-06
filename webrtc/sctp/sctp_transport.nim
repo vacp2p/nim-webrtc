@@ -30,7 +30,6 @@ logScope:
 # - Replace doAssert by a proper exception management
 # - Find a clean way to manage SCTP ports
 
-var errno {.importc, header: "<errno.h>".}: cint ## error variable
 proc printf(
   format: cstring
 ) {.cdecl, importc: "printf", varargs, header: "<stdio.h>", gcsafe.}
@@ -137,16 +136,6 @@ proc close*(self: Sctp) {.async: (raises: [CancelledError]).} =
   untrackCounter(SctpTransportTracker)
   discard usrsctp_finish()
 
-proc readLoopProc(res: SctpConn) {.async: (raises: [CancelledError, WebRtcError]).} =
-  while true:
-    let msg = await res.conn.read()
-    if msg == @[]:
-      trace "Sctp read loop stopped, DTLS connection closed"
-      return
-    trace "Receive data",
-      remoteAddress = res.conn.remoteAddress(), sctPacket = $(msg.getSctpPacket())
-    usrsctp_conninput(cast[pointer](res), unsafeAddr msg[0], uint(msg.len), 0)
-
 proc socketSetup(
     conn: SctpConn, callback: proc(a1: ptr socket, a2: pointer, a3: cint) {.cdecl.}
 ): bool =
@@ -190,8 +179,6 @@ proc accept*(
   var conn: SctpConn
   while true:
     conn = SctpConn.new(await self.dtls.accept())
-    usrsctp_register_address(cast[pointer](conn))
-    conn.readLoop = conn.readLoopProc()
     conn.acceptEvent.clear()
     await conn.acceptEvent.wait()
     if conn.state == SctpState.SctpConnected and conn.socketSetup(recvCallback):
@@ -214,19 +201,7 @@ proc connect*(
   if not conn.socketSetup(handleConnect):
     raise newException(WebRtcError, "SCTP - Socket setup failed while connecting")
 
-  var sconn: Sockaddr_conn
-  sconn.sconn_family = AF_CONN
-  sconn.sconn_port = htons(sctpPort)
-  sconn.sconn_addr = cast[pointer](conn)
-  usrsctp_register_address(cast[pointer](conn))
-  conn.readLoop = conn.readLoopProc()
-
-  let connErr = conn.sctpSocket.usrsctp_connect(
-    cast[ptr SockAddr](addr sconn), SockLen(sizeof(sconn))
-  )
-  if connErr != 0 and errno != SctpEINPROGRESS:
-    raise
-      newException(WebRtcError, "SCTP - Connection failed: " & $(sctpStrerror(errno)) & $errno)
+  await conn.connect(sctpPort)
 
   conn.connectEvent.clear()
   await conn.connectEvent.wait()

@@ -49,17 +49,17 @@ proc remoteAddress*(self: SctpConn): TransportAddress =
     raise newException(WebRtcError, "SCTP - Connection not set")
   return self.conn.remoteAddress()
 
-proc trySend(self: SctpConn) {.async: (raises: [CancelledError]).} =
-  try:
-    trace "Send To", address = self.remoteAddress()
-    await self.conn.write(self.sendQueue)
-  except CatchableError as exc:
-    trace "Send Failed", message = exc.msg
-
 template usrsctpAwait*(self: SctpConn, body: untyped): untyped =
   # usrsctpAwait is template which set `sendQueue` to @[] then calls
   # an usrsctp function. If during the synchronous run of the usrsctp function
   # `sendQueue` is set, it is sent at the end of the function.
+  proc trySend(conn: SctpConn) {.async: (raises: [CancelledError]).} =
+    try:
+      trace "Send To", address = conn.remoteAddress()
+      await conn.conn.write(self.sendQueue)
+    except CatchableError as exc:
+      trace "Send Failed", exceptionMsg = exc.msg
+
   self.sendQueue = @[]
   when type(body) is void:
     (body)
@@ -147,14 +147,39 @@ proc toFlags(params: SctpMessageParameters): uint16 =
   if params.unordered:
     result = result or SCTP_UNORDERED
 
+proc readLoopProc(self: SctpConn) {.async: (raises: [CancelledError, WebRtcError]).} =
+  while true:
+    let msg = await self.conn.read()
+    if msg == @[]:
+      trace "Sctp read loop stopped, DTLS connection closed"
+      return
+    trace "Receive data",
+      remoteAddress = self.conn.remoteAddress(), sctPacket = $(msg.getSctpPacket())
+    self.usrsctpAwait:
+      usrsctp_conninput(cast[pointer](self), unsafeAddr msg[0], uint(msg.len), 0)
+
 proc new*(T: typedesc[SctpConn], conn: DtlsConn): T =
-  T(
+  result = T(
     conn: conn,
     state: SctpConnecting,
     connectEvent: AsyncEvent(),
     acceptEvent: AsyncEvent(),
     dataRecv: newAsyncQueue[SctpMessage](),
   )
+  result.readLoop = result.readLoopProc()
+  usrsctp_register_address(cast[pointer](result))
+
+proc connect*(self: SctpConn, sctpPort: uint16) {.async: (raises: [CancelledError, WebRtcError]).} =
+  var sconn: Sockaddr_conn
+  sconn.sconn_family = AF_CONN
+  sconn.sconn_port = htons(sctpPort)
+  sconn.sconn_addr = cast[pointer](self)
+  let connErr = self.usrsctpAwait: self.sctpSocket.usrsctp_connect(
+    cast[ptr SockAddr](unsafeAddr sconn), SockLen(sizeof(sconn))
+  )
+  if connErr != 0 and errno != SctpEINPROGRESS:
+    raise
+      newException(WebRtcError, "SCTP - Connection failed: " & $(sctpStrerror(errno)) & $errno)
 
 proc read*(self: SctpConn): Future[SctpMessage] {.async: (raises: [CancelledError, WebRtcError]).} =
   # Used by DataChannel, returns SctpMessage in order to get the stream
