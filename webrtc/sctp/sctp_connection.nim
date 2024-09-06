@@ -156,7 +156,7 @@ proc new*(T: typedesc[SctpConn], conn: DtlsConn): T =
     dataRecv: newAsyncQueue[SctpMessage](),
   )
 
-proc read*(self: SctpConn): Future[SctpMessage] {.async: (raises: [CancelledError]).} =
+proc read*(self: SctpConn): Future[SctpMessage] {.async: (raises: [CancelledError, WebRtcError]).} =
   # Used by DataChannel, returns SctpMessage in order to get the stream
   # and protocol ids
   if self.state == SctpClosed:
