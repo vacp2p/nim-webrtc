@@ -159,14 +159,17 @@ proc new*(T: typedesc[SctpConn], conn: DtlsConn): T =
 proc read*(self: SctpConn): Future[SctpMessage] {.async: (raises: [CancelledError]).} =
   # Used by DataChannel, returns SctpMessage in order to get the stream
   # and protocol ids
+  if self.state == SctpClosed:
+    raise newException(WebRtcError, "Try to read on an already closed SctpConn")
   return await self.dataRecv.popFirst()
 
 proc write*(
     self: SctpConn, buf: seq[byte], sendParams = default(SctpMessageParameters)
 ) {.async: (raises: [CancelledError, WebRtcError]).} =
   # Used by DataChannel, writes buf on the Dtls connection.
+  if self.state == SctpClosed:
+    raise newException(WebRtcError, "Try to write on an already closed SctpConn")
   trace "Write", buf
-
   var cpy = buf
   let sendvErr =
     if sendParams == default(SctpMessageParameters):
@@ -209,8 +212,12 @@ proc write*(
   await self.write(s.toBytes())
 
 proc close*(self: SctpConn) {.async: (raises: [CancelledError, WebRtcError]).} =
+  if self.state == SctpClosed:
+    debug "Try to close SctpConn twice"
+    return
   self.usrsctpAwait:
     self.sctpSocket.usrsctp_close()
+  self.state = SctpClosed
   await self.conn.close()
   usrsctp_deregister_address(cast[pointer](self))
   untrackCounter(SctpConnTracker)
