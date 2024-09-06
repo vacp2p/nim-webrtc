@@ -42,7 +42,6 @@ type Sctp* = ref object
   isServer: bool
   sockServer: ptr socket
   pendingConnections: seq[SctpConn]
-  sentFuture: Future[void].Raising([CancelledError])
 
 # -- usrsctp accept and connect callbacks --
 
@@ -136,7 +135,7 @@ proc new*(T: type Sctp, dtls: Dtls): T =
 proc close*(self: Sctp) {.async: (raises: [CancelledError]).} =
   # TODO: close every connections
   untrackCounter(SctpTransportTracker)
-  discard self.usrsctpAwait usrsctp_finish()
+  discard usrsctp_finish()
 
 proc readLoopProc(res: SctpConn) {.async: (raises: [CancelledError, WebRtcError]).} =
   while true:
@@ -222,10 +221,9 @@ proc connect*(
   usrsctp_register_address(cast[pointer](conn))
   conn.readLoop = conn.readLoopProc()
 
-  let connErr = self.usrsctpAwait:
-    conn.sctpSocket.usrsctp_connect(
-      cast[ptr SockAddr](addr sconn), SockLen(sizeof(sconn))
-    )
+  let connErr = conn.sctpSocket.usrsctp_connect(
+    cast[ptr SockAddr](addr sconn), SockLen(sizeof(sconn))
+  )
   if connErr != 0 and errno != SctpEINPROGRESS:
     raise
       newException(WebRtcError, "SCTP - Connection failed: " & $(sctpStrerror(errno)) & $errno)

@@ -76,19 +76,3 @@ proc getSctpPacket*(buffer: seq[byte]): SctpPacketStructure =
 proc sctpStrerror*(
   error: int
 ): cstring {.importc: "strerror", cdecl, header: "<string.h>".}
-
-template usrsctpAwait*(self: untyped, body: untyped): untyped =
-  # usrsctpAwait is template which set `sentFuture` to nil then calls (usually)
-  # an usrsctp function. If during the synchronous run of the usrsctp function
-  # `sendCallback` is called, then `sentFuture` is set and waited.
-  # self should be Sctp or SctpConn
-  self.sentFuture = nil
-  when type(body) is void:
-    (body)
-    if self.sentFuture != nil:
-      await self.sentFuture
-  else:
-    let res = (body)
-    if self.sentFuture != nil:
-      await self.sentFuture
-    res

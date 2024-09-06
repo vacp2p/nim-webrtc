@@ -42,12 +42,34 @@ type
     readLoop*: Future[void]
     sctpSocket*: ptr socket
     dataRecv*: AsyncQueue[SctpMessage]
-    sentFuture*: Future[void].Raising([CancelledError])
+    sendQueue: seq[byte]
 
 proc remoteAddress*(self: SctpConn): TransportAddress =
   if self.conn.isNil():
     raise newException(WebRtcError, "SCTP - Connection not set")
   return self.conn.remoteAddress()
+
+proc trySend(self: SctpConn) {.async: (raises: [CancelledError]).} =
+  try:
+    trace "Send To", address = self.remoteAddress()
+    await self.conn.write(self.sendQueue)
+  except CatchableError as exc:
+    trace "Send Failed", message = exc.msg
+
+template usrsctpAwait*(self: SctpConn, body: untyped): untyped =
+  # usrsctpAwait is template which set `sendQueue` to @[] then calls
+  # an usrsctp function. If during the synchronous run of the usrsctp function
+  # `sendQueue` is set, it is sent at the end of the function.
+  self.sendQueue = @[]
+  when type(body) is void:
+    (body)
+    if self.sendQueue.len() > 0:
+      await self.trySend()
+  else:
+    let res = (body)
+    if self.sendQueue.len() > 0:
+      await self.trySend()
+    res
 
 # -- usrsctp send and receive callback --
 
@@ -117,7 +139,7 @@ proc sendCallback*(
     except CatchableError as exc:
       trace "Send Failed", message = exc.msg
 
-  conn.sentFuture = testSend()
+  conn.sendQueue = buf
 
 proc toFlags(params: SctpMessageParameters): uint16 =
   if params.endOfRecord:
