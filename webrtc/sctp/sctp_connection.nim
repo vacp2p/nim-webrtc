@@ -39,7 +39,7 @@ type
     state*: SctpState
     connectEvent*: AsyncEvent
     acceptEvent*: AsyncEvent
-    readLoop*: Future[void]
+    readLoop: Future[void].Raising([CancelledError, WebRtcError])
     sctpSocket*: ptr socket
     dataRecv*: AsyncQueue[SctpMessage]
     sendQueue: seq[byte]
@@ -240,9 +240,10 @@ proc close*(self: SctpConn) {.async: (raises: [CancelledError, WebRtcError]).} =
   if self.state == SctpClosed:
     debug "Try to close SctpConn twice"
     return
+  usrsctp_deregister_address(cast[pointer](self))
   self.usrsctpAwait:
     self.sctpSocket.usrsctp_close()
+  await self.readLoop.cancelAndWait()
   self.state = SctpClosed
   await self.conn.close()
-  usrsctp_deregister_address(cast[pointer](self))
   untrackCounter(SctpConnTracker)
