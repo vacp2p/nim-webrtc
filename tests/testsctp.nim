@@ -38,7 +38,7 @@ suite "SCTP":
     result.sctp.listen()
 
   proc closeSctpStack(self: SctpStackForTest) {.async: (raises: [CancelledError]).} =
-    await self.sctp.close()
+    await self.sctp.stop()
     await self.dtls.stop()
     await self.stun.stop()
     await self.udp.close()

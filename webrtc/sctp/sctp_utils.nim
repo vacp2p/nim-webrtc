@@ -79,4 +79,4 @@ proc sctpStrerror*(): string =
   proc strerror(
     error: int
   ): cstring {.importc: "strerror", cdecl, header: "<string.h>".}
-  return $(sctpStrerror(errno))
+  return $(strerror(errno))
