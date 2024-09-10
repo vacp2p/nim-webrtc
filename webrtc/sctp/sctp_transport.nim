@@ -23,8 +23,7 @@ logScope:
 
 # Implementation of an Sctp client and server using the usrsctp library.
 # Usrsctp is usable as a single thread but it's not the intended way to
-# use it. There's a lot of callbacks calling each other in a synchronous
-# way where we want to be able to call asynchronous procedure, but cannot.
+# use it. There's a lot of callbacks calling each other in a synchronous way.
 
 # TODO:
 # - Replace doAssert by a proper exception management
@@ -35,18 +34,15 @@ proc printf(
 ) {.cdecl, importc: "printf", varargs, header: "<stdio.h>", gcsafe.}
 
 type Sctp* = ref object
-  dtls: Dtls
-  connections: Table[TransportAddress, SctpConn]
-  gotConnection: AsyncEvent
+  dtls: Dtls # Underlying Dtls Transport
+  connections: Table[TransportAddress, SctpConn] # List of all the Sctp connections
   isServer: bool
-  sockServer: ptr socket
-  pendingConnections: seq[SctpConn]
+  sockServer: ptr socket # usrsctp socket to accept new connections
 
 # -- usrsctp accept and connect callbacks --
 
 proc handleAccept(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
-  # Callback procedure called when accepting a connection
-  trace "Handle Accept"
+  # Callback procedure called when a connection is about to be accepted.
   var
     sconn: Sockaddr_conn
     slen: Socklen = sizeof(Sockaddr_conn).uint32
@@ -60,6 +56,7 @@ proc handleAccept(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
     warn "usrsctp_accept fails", error = sctpStrerror(errno)
     conn.state = SctpState.SctpClosed
   else:
+    trace "Scpt connection accepted", remoteAddress = conn.remoteAddress()
     conn.sctpSocket = sctpSocket
     conn.state = SctpState.SctpConnected
   conn.acceptEvent.fire()
@@ -70,29 +67,24 @@ proc handleConnect(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
     conn = cast[SctpConn](data)
     events = usrsctp_get_events(sock)
 
-  trace "Handle Connect", events, state = conn.state
   if conn.state == SctpState.SctpConnecting:
     if bitand(events, SCTP_EVENT_ERROR) != 0:
-      warn "Cannot connect", raddr = conn.remoteAddress()
+      warn "Cannot connect", remoteAddress = conn.remoteAddress()
       conn.state = SctpState.SctpClosed
     elif bitand(events, SCTP_EVENT_WRITE) != 0:
       conn.state = SctpState.SctpConnected
-      doAssert 0 == usrsctp_set_upcall(conn.sctpSocket, recvCallback, data)
+      if usrsctp_set_upcall(conn.sctpSocket, recvCallback, data) != 0:
+        warn "usrsctp_set_upcall fails while connecting", error = sctpStrerror(errno)
+      trace "Sctp connection connected", remoteAddress = conn.remoteAddress()
     conn.connectEvent.fire()
   else:
-    warn "should be connecting", currentState = conn.state
-
-# -- Sctp --
+    warn "Should never happen", currentState = conn.state
 
 proc stopServer*(self: Sctp) =
   if not self.isServer:
     trace "Try to close a client"
     return
   self.isServer = false
-  let pcs = self.pendingConnections
-  self.pendingConnections = @[]
-  for pc in pcs:
-    pc.sctpSocket.usrsctp_close()
   self.sockServer.usrsctp_close()
 
 proc listen*(self: Sctp, sctpPort: uint16 = 5000) =
@@ -119,7 +111,6 @@ proc listen*(self: Sctp, sctpPort: uint16 = 5000) =
 
 proc new*(T: type Sctp, dtls: Dtls): T =
   var self = T()
-  self.gotConnection = newAsyncEvent()
   self.dtls = dtls
 
   when defined(windows):
