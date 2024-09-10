@@ -141,12 +141,6 @@ proc sendCallback*(
 
   conn.sendQueue = buf
 
-proc toFlags(params: SctpMessageParameters): uint16 =
-  if params.endOfRecord:
-    result = result or SCTP_EOR
-  if params.unordered:
-    result = result or SCTP_UNORDERED
-
 proc readLoopProc(self: SctpConn) {.async: (raises: [CancelledError, WebRtcError]).} =
   while true:
     let msg = await self.conn.read()
@@ -188,6 +182,12 @@ proc read*(self: SctpConn): Future[SctpMessage] {.async: (raises: [CancelledErro
     raise newException(WebRtcError, "Try to read on an already closed SctpConn")
   return await self.dataRecv.popFirst()
 
+proc toFlags(params: SctpMessageParameters): uint16 =
+  if params.endOfRecord:
+    result = result or SCTP_EOR
+  if params.unordered:
+    result = result or SCTP_UNORDERED
+
 proc write*(
     self: SctpConn, buf: seq[byte], sendParams = default(SctpMessageParameters)
 ) {.async: (raises: [CancelledError, WebRtcError]).} =
@@ -215,7 +215,7 @@ proc write*(
       var sendInfo = sctp_sndinfo(
         snd_sid: sendParams.streamId,
         snd_ppid: sendParams.protocolId.swapBytes(),
-        snd_flags: sendParams.toFlags,
+        snd_flags: sendParams.toFlags(),
       )
       self.usrsctpAwait:
         self.sctpSocket.usrsctp_sendv(
