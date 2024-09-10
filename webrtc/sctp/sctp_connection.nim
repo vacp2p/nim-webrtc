@@ -101,7 +101,7 @@ proc recvCallback*(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
       cast[ptr cint](addr flags),
     )
     if n < 0:
-      trace "usrsctp_recvv", error = sctpStrerror(n)
+      trace "usrsctp_recvv", error = sctpStrerror()
       # TODO: should close
       return
     elif n > 0:
@@ -179,7 +179,7 @@ proc connect*(self: SctpConn, sctpPort: uint16) {.async: (raises: [CancelledErro
   )
   if connErr != 0 and errno != SctpEINPROGRESS:
     raise
-      newException(WebRtcError, "SCTP - Connection failed: " & $(sctpStrerror(errno)) & $errno)
+      newException(WebRtcError, "SCTP - Connection failed: " & sctpStrerror())
 
 proc read*(self: SctpConn): Future[SctpMessage] {.async: (raises: [CancelledError, WebRtcError]).} =
   # Used by DataChannel, returns SctpMessage in order to get the stream
@@ -229,7 +229,7 @@ proc write*(
           0,
         )
   if sendvErr < 0:
-    raise newException(WebRtcError, "SCTP - " & $(sctpStrerror(sendvErr)))
+    raise newException(WebRtcError, "SCTP - " & sctpStrerror())
 
 proc write*(
     self: SctpConn, s: string

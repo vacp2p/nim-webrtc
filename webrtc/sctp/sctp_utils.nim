@@ -75,6 +75,8 @@ proc getSctpPacket*(buffer: seq[byte]): SctpPacketStructure =
       # padding; could use `size.inc(-size %% 4)` instead but it lacks clarity
       size.inc(1)
 
-proc sctpStrerror*(
-  error: int
-): cstring {.importc: "strerror", cdecl, header: "<string.h>".}
+proc sctpStrerror*(): string =
+  proc strerror(
+    error: int
+  ): cstring {.importc: "strerror", cdecl, header: "<string.h>".}
+  return $(sctpStrerror(errno))

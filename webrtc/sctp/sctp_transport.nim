@@ -26,7 +26,6 @@ logScope:
 # use it. There's a lot of callbacks calling each other in a synchronous way.
 
 # TODO:
-# - Replace doAssert by a proper exception management
 # - Find a clean way to manage SCTP ports
 
 proc printf(
@@ -53,7 +52,7 @@ proc handleAccept(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
     conn = cast[SctpConn](sconn.sconn_addr)
 
   if sctpSocket.isNil():
-    warn "usrsctp_accept fails", error = sctpStrerror(errno)
+    warn "usrsctp_accept fails", error = sctpStrerror()
     conn.state = SctpState.SctpClosed
   else:
     trace "Scpt connection accepted", remoteAddress = conn.remoteAddress()
@@ -74,40 +73,69 @@ proc handleConnect(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
     elif bitand(events, SCTP_EVENT_WRITE) != 0:
       conn.state = SctpState.SctpConnected
       if usrsctp_set_upcall(conn.sctpSocket, recvCallback, data) != 0:
-        warn "usrsctp_set_upcall fails while connecting", error = sctpStrerror(errno)
+        warn "usrsctp_set_upcall fails while connecting", error = sctpStrerror()
       trace "Sctp connection connected", remoteAddress = conn.remoteAddress()
     conn.connectEvent.fire()
   else:
     warn "Should never happen", currentState = conn.state
 
 proc stopServer*(self: Sctp) =
+  ## Sctp Transport stop acting like a server
+  ##
   if not self.isServer:
     trace "Try to close a client"
     return
   self.isServer = false
   self.sockServer.usrsctp_close()
 
-proc listen*(self: Sctp, sctpPort: uint16 = 5000) =
-  if self.isServer:
-    trace "Try to start the server twice"
-    return
-  self.isServer = true
-  trace "Listening", sctpPort
-  doAssert 0 == usrsctp_sysctl_set_sctp_blackhole(2)
-  doAssert 0 == usrsctp_sysctl_set_sctp_no_csum_on_loopback(0)
-  doAssert 0 == usrsctp_sysctl_set_sctp_delayed_sack_time_default(0)
+proc serverSetup(self: Sctp, sctpPort: uint16): bool =
+  if usrsctp_sysctl_set_sctp_blackhole(2) != 0:
+    warn "usrsctp_sysctl_set_sctp_blackhole fails", error = sctpStrerror()
+    return false
+
+  if usrsctp_sysctl_set_sctp_no_csum_on_loopback(0) != 0:
+    warn "usrsctp_sysctl_set_sctp_no_csum_on_loopback fails", error = sctpStrerror()
+    return false
+
+  if usrsctp_sysctl_set_sctp_delayed_sack_time_default(0) != 0:
+    warn "usrsctp_sysctl_set_sctp_delayed_sack_time_default fails", error = sctpStrerror()
+    return false
+
   let sock = usrsctp_socket(AF_CONN, SOCK_STREAM.toInt(), IPPROTO_SCTP, nil, nil, 0, nil)
-  var on: int = 1
-  doAssert 0 == usrsctp_set_non_blocking(sock, 1)
+  if usrsctp_set_non_blocking(sock, 1) != 0:
+    warn "usrsctp_set_non_blocking fails", error = sctpStrerror()
+    return false
+
   var sin: Sockaddr_in
   sin.sin_family = type(sin.sin_family)(SctpAF_INET)
   sin.sin_port = htons(sctpPort)
   sin.sin_addr.s_addr = htonl(INADDR_ANY)
-  doAssert 0 ==
-    usrsctp_bind(sock, cast[ptr SockAddr](addr sin), SockLen(sizeof(Sockaddr_in)))
-  doAssert 0 >= usrsctp_listen(sock, 1)
-  doAssert 0 == sock.usrsctp_set_upcall(handleAccept, cast[pointer](self))
+  if usrsctp_bind(sock, cast[ptr SockAddr](addr sin), SockLen(sizeof(Sockaddr_in))) != 0:
+    warn "usrsctp_bind fails", error = sctpStrerror()
+    return false
+
+  if usrsctp_listen(sock, 1) < 0:
+    warn "usrsctp_listen fails", error = sctpStrerror()
+    return false
+
+  if sock.usrsctp_set_upcall(handleAccept, cast[pointer](self)) != 0:
+    warn "usrsctp_set_upcall fails", error = sctpStrerror()
+    return false
+
   self.sockServer = sock
+  return true
+
+proc listen*(self: Sctp, sctpPort: uint16 = 5000) =
+  ## listen marks the Sctp Transport as a transport that will be used to accept
+  ## incoming connection requests using accept.
+  ##
+  if self.isServer:
+    trace "Try to start the server twice"
+    return
+  self.isServer = true
+  trace "Sctp listening", sctpPort
+  if not self.serverSetup(sctpPort):
+    raise newException(WebRtcError, "SCTP - Fails to listen")
 
 proc new*(T: type Sctp, dtls: Dtls): T =
   var self = T()
@@ -130,32 +158,22 @@ proc close*(self: Sctp) {.async: (raises: [CancelledError]).} =
 proc socketSetup(
     conn: SctpConn, callback: proc(a1: ptr socket, a2: pointer, a3: cint) {.cdecl.}
 ): bool =
-  var
-    errorCode = conn.sctpSocket.usrsctp_set_non_blocking(1)
-    nodelay: uint32 = 1
-    recvinfo: uint32 = 1
-
-  if errorCode != 0:
-    warn "usrsctp_set_non_blocking fails", error = sctpStrerror(errorCode)
+  if conn.sctpSocket.usrsctp_set_non_blocking(1) != 0:
+    warn "usrsctp_set_non_blocking fails", error = sctpStrerror()
     return false
 
-  errorCode = conn.sctpSocket.usrsctp_set_upcall(callback, cast[pointer](conn))
-  if errorCode != 0:
-    warn "usrsctp_set_upcall fails", error = sctpStrerror(errorCode)
+  if conn.sctpSocket.usrsctp_set_upcall(callback, cast[pointer](conn)) != 0:
+    warn "usrsctp_set_upcall fails", error = sctpStrerror()
     return false
 
-  errorCode = conn.sctpSocket.usrsctp_setsockopt(
-    IPPROTO_SCTP, SCTP_NODELAY, addr nodelay, sizeof(nodelay).SockLen
-  )
-  if errorCode != 0:
-    warn "usrsctp_setsockopt nodelay fails", error = sctpStrerror(errorCode)
+  var nodelay: uint32 = 1
+  if conn.sctpSocket.usrsctp_setsockopt(IPPROTO_SCTP, SCTP_NODELAY, addr nodelay, sizeof(nodelay).SockLen) != 0:
+    warn "usrsctp_setsockopt nodelay fails", error = sctpStrerror()
     return false
 
-  errorCode = conn.sctpSocket.usrsctp_setsockopt(
-    IPPROTO_SCTP, SCTP_RECVRCVINFO, addr recvinfo, sizeof(recvinfo).SockLen
-  )
-  if errorCode != 0:
-    warn "usrsctp_setsockopt recvinfo fails", error = sctpStrerror(errorCode)
+  var recvinfo: uint32 = 1
+  if conn.sctpSocket.usrsctp_setsockopt(IPPROTO_SCTP, SCTP_RECVRCVINFO, addr recvinfo, sizeof(recvinfo).SockLen) != 0:
+    warn "usrsctp_setsockopt recvinfo fails", error = sctpStrerror()
     return false
   return true
 
