@@ -18,6 +18,8 @@ const SctpConnTracker* = "webrtc.sctp.conn"
 
 # TODO: closing connection if usrsctp_recv / usrsctp_read fails
 type
+  SctpConnOnClose* = proc() {.raises: [], gcsafe.}
+
   SctpState* = enum
     SctpConnecting
     SctpConnected
@@ -37,6 +39,7 @@ type
   SctpConn* = ref object
     conn*: DtlsConn
     state*: SctpState
+    onClose: seq[SctpConnOnClose]
     connectEvent*: AsyncEvent
     acceptEvent*: AsyncEvent
     readLoop: Future[void].Raising([CancelledError, WebRtcError])
@@ -140,6 +143,11 @@ proc sendCallback*(
       trace "Send Failed", message = exc.msg
 
   conn.sendQueue = buf
+
+proc addOnClose*(self: SctpConn, onCloseProc: SctpConnOnClose) =
+  ## Adds a proc to be called when SctpConn is closed
+  ##
+  self.onClose.add(onCloseProc)
 
 proc readLoopProc(self: SctpConn) {.async: (raises: [CancelledError, WebRtcError]).} =
   while true:
@@ -245,5 +253,8 @@ proc close*(self: SctpConn) {.async: (raises: [CancelledError, WebRtcError]).} =
     self.sctpSocket.usrsctp_close()
   await self.readLoop.cancelAndWait()
   self.state = SctpClosed
-  await self.conn.close()
   untrackCounter(SctpConnTracker)
+  await self.conn.close()
+  for onCloseProc in self.onClose:
+    onCloseProc()
+  self.onClose = @[]

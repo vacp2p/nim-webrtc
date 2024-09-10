@@ -7,7 +7,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import tables, bitops, nativesockets, strutils
+import tables, bitops, nativesockets, strutils, sequtils
 import usrsctp, chronos, chronicles
 import
   ./[sctp_connection, sctp_utils], ../errors, ../dtls/[dtls_transport, dtls_connection]
@@ -159,9 +159,13 @@ proc new*(T: type Sctp, dtls: Dtls): T =
   return self
 
 proc stop*(self: Sctp) {.async: (raises: [CancelledError]).} =
-  # TODO: close every connections
+  if self.isServer:
+    self.stopServer()
   untrackCounter(SctpTransportTracker)
-  discard usrsctp_finish()
+  let connections = toSeq(self.connections.values())
+  await allFutures(connections.mapIt(it.close()))
+  if usrsctp_finish() != 0:
+    warn "usrsct_finish failed", error = sctpStrerror()
 
 proc socketSetup(
     conn: SctpConn, callback: proc(a1: ptr socket, a2: pointer, a3: cint) {.cdecl.}
@@ -185,6 +189,13 @@ proc socketSetup(
     return false
   return true
 
+proc addConnToTable(self: Sctp, conn: SctpConn) =
+  let remoteAddress = conn.remoteAddress()
+  proc cleanup() =
+    self.connections.del(remoteAddress)
+  self.connections[remoteAddress] = conn
+  conn.addOnClose(cleanup)
+
 proc accept*(
     self: Sctp
 ): Future[SctpConn] {.async: (raises: [CancelledError, WebRtcError]).} =
@@ -202,7 +213,7 @@ proc accept*(
       break
     await conn.close()
 
-  self.connections[conn.remoteAddress()] = conn
+  self.addConnToTable(conn)
   trackCounter(SctpConnTracker)
   return conn
 
@@ -224,6 +235,6 @@ proc connect*(
   await conn.connectEvent.wait()
   if conn.state == SctpState.SctpClosed:
     raise newException(WebRtcError, "SCTP - Connection failed")
-  self.connections[raddr] = conn
+  self.addConnToTable(conn)
   trackCounter(SctpConnTracker)
   return conn
