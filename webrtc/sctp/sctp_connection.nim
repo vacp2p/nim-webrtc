@@ -103,7 +103,7 @@ proc recvCallback*(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
       cast[ptr cint](addr flags),
     )
     if n < 0:
-      trace "usrsctp_recvv", error = sctpStrerror()
+      warn "usrsctp_recvv", error = sctpStrerror()
       return
     elif n > 0:
       # It might be necessary to check if infotype == SCTP_RECVV_RCVINFO
@@ -200,7 +200,6 @@ proc write*(
   # Used by DataChannel, writes buf on the Dtls connection.
   if self.state == SctpClosed:
     raise newException(WebRtcError, "Try to write on an already closed SctpConn")
-  trace "Write", buf
   var cpy = buf
   let sendvErr =
     if sendParams == default(SctpMessageParameters):
