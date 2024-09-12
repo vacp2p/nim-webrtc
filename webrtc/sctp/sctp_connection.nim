@@ -16,7 +16,6 @@ logScope:
 
 const SctpConnTracker* = "webrtc.sctp.conn"
 
-# TODO: closing connection if usrsctp_recv / usrsctp_read fails
 type
   SctpConnOnClose* = proc() {.raises: [], gcsafe.}
 
@@ -52,7 +51,7 @@ proc remoteAddress*(self: SctpConn): TransportAddress =
     raise newException(WebRtcError, "SCTP - Connection not set")
   return self.conn.remoteAddress()
 
-template usrsctpAwait*(self: SctpConn, body: untyped): untyped =
+template usrsctpAwait(self: SctpConn, body: untyped): untyped =
   # usrsctpAwait is template which set `sendQueue` to @[] then calls
   # an usrsctp function. If during the synchronous run of the usrsctp function
   # `sendQueue` is set, it is sent at the end of the function.
@@ -105,7 +104,6 @@ proc recvCallback*(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
     )
     if n < 0:
       trace "usrsctp_recvv", error = sctpStrerror()
-      # TODO: should close
       return
     elif n > 0:
       # It might be necessary to check if infotype == SCTP_RECVV_RCVINFO

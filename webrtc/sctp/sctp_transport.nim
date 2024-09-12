@@ -36,7 +36,7 @@ type Sctp* = ref object
   dtls: Dtls # Underlying Dtls Transport
   connections: Table[TransportAddress, SctpConn] # List of all the Sctp connections
   isServer: bool
-  sockServer: ptr socket # usrsctp socket to accept new connections
+  sockServer: ptr socket # usrsctp "server" socket to accept new connections
 
 # -- usrsctp accept and connect callbacks --
 
