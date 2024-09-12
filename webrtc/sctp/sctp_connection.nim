@@ -37,14 +37,14 @@ type
     params*: SctpMessageParameters
 
   SctpConn* = ref object
-    conn*: DtlsConn
+    conn: DtlsConn
     state*: SctpState
     onClose: seq[SctpConnOnClose]
     connectEvent*: AsyncEvent
     acceptEvent*: AsyncEvent
     readLoop: Future[void].Raising([CancelledError, WebRtcError])
     sctpSocket*: ptr socket
-    dataRecv*: AsyncQueue[SctpMessage]
+    dataRecv: AsyncQueue[SctpMessage]
     sendQueue: seq[byte]
 
 proc remoteAddress*(self: SctpConn): TransportAddress =
@@ -77,8 +77,8 @@ template usrsctpAwait*(self: SctpConn, body: untyped): untyped =
 # -- usrsctp send and receive callback --
 
 proc recvCallback*(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
-  # Callback procedure called when we receive data after
-  # connection has been established.
+  # Callback procedure called when we receive data after a connection
+  # has been established.
   let
     conn = cast[SctpConn](data)
     events = usrsctp_get_events(sock)
