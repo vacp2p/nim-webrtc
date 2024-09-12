@@ -159,6 +159,8 @@ proc new*(T: type Sctp, dtls: Dtls): T =
   return self
 
 proc stop*(self: Sctp) {.async: (raises: [CancelledError]).} =
+  ## Stops the Sctp Transport
+  ##
   if self.isServer:
     self.stopServer()
   untrackCounter(SctpTransportTracker)
@@ -170,6 +172,8 @@ proc stop*(self: Sctp) {.async: (raises: [CancelledError]).} =
 proc socketSetup(
     conn: SctpConn, callback: proc(a1: ptr socket, a2: pointer, a3: cint) {.cdecl.}
 ): bool =
+  # This procedure setup SctpConn. It should be in `sctp_connection.nim` file but I
+  # prefer not to expose it.
   if conn.sctpSocket.usrsctp_set_non_blocking(1) != 0:
     warn "usrsctp_set_non_blocking failed", error = sctpStrerror()
     return false
@@ -203,7 +207,6 @@ proc accept*(
   ##
   if not self.isServer:
     raise newException(WebRtcError, "SCTP - Not a server")
-  trace "Accept connection"
   var conn: SctpConn
   while true:
     conn = SctpConn.new(await self.dtls.accept())
@@ -220,7 +223,8 @@ proc accept*(
 proc connect*(
     self: Sctp, raddr: TransportAddress, sctpPort: uint16 = 5000
 ): Future[SctpConn] {.async: (raises: [CancelledError, WebRtcError]).} =
-  trace "Create Connection", raddr
+  ## Connect to a remote address and returns an Sctp Connection
+  ##
   let conn = SctpConn.new(await self.dtls.connect(raddr))
   conn.state = SctpState.SctpConnecting
   conn.sctpSocket =
