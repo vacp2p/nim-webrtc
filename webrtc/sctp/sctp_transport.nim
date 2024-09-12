@@ -22,8 +22,9 @@ logScope:
   topics = "webrtc sctp"
 
 # Implementation of an Sctp client and server using the usrsctp library.
-# Usrsctp is usable as a single thread but it's not the intended way to
-# use it. There's a lot of callbacks calling each other in a synchronous way.
+# Usrsctp is usable with a single thread but this is not the intended
+# way to use it. As a result, there are many callbacks that calls each
+# other synchronously.
 
 proc printf(
   format: cstring
