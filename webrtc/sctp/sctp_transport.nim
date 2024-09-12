@@ -25,9 +25,6 @@ logScope:
 # Usrsctp is usable as a single thread but it's not the intended way to
 # use it. There's a lot of callbacks calling each other in a synchronous way.
 
-# TODO:
-# - Find a clean way to manage SCTP ports
-
 proc printf(
   format: cstring
 ) {.cdecl, importc: "printf", varargs, header: "<stdio.h>", gcsafe.}
