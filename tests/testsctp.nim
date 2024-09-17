@@ -47,10 +47,13 @@ suite "SCTP":
     var
       sctpServer = initSctpStack(initTAddress("127.0.0.1:4444"))
       sctpClient = initSctpStack(initTAddress("127.0.0.1:5555"))
-    let
-      serverConnFut = sctpServer.sctp.accept()
-      clientConn = await sctpClient.sctp.connect(sctpServer.localAddress)
-      serverConn = await serverConnFut
+    echo "Before Accept"
+    let serverConnFut = sctpServer.sctp.accept()
+    echo "Before Connect"
+    let clientConn = await sctpClient.sctp.connect(sctpServer.localAddress)
+    echo "Before await accept"
+    let serverConn = await serverConnFut
+    echo "Connected :tada:"
 
     await clientConn.write(@[1'u8, 2, 3, 4])
     check (await serverConn.read()).data == @[1'u8, 2, 3, 4]
