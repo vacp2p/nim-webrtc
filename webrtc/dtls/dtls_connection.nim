@@ -16,7 +16,7 @@ import
 import ../errors, ../stun/[stun_connection], ./dtls_utils
 
 logScope:
-  topics = "webrtc dtls_conn"
+  topics = "webrtc dtls dtls_conn"
 
 const DtlsConnTracker* = "webrtc.dtls.conn"
 

@@ -17,7 +17,7 @@ import stun_attributes, ../errors
 export binary_serialization
 
 logScope:
-  topics = "webrtc stun"
+  topics = "webrtc stun stun_message"
 
 const
   StunMsgHeaderSize = 20

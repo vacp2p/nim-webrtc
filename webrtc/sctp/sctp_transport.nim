@@ -19,7 +19,7 @@ const
   IPPROTO_SCTP = 132
 
 logScope:
-  topics = "webrtc sctp"
+  topics = "webrtc sctp sctp_transport"
 
 # Implementation of an Sctp client and server using the usrsctp library.
 # Usrsctp is usable with a single thread but this is not the intended

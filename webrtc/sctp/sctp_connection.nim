@@ -12,7 +12,7 @@ import usrsctp, chronos, chronicles, stew/[ptrops, endians2, byteutils]
 import ./sctp_utils, ../errors, ../dtls/dtls_connection
 
 logScope:
-  topics = "webrtc sctp_connection"
+  topics = "webrtc sctp sctp_connection"
 
 const SctpConnTracker* = "webrtc.sctp.conn"
 
