@@ -22,7 +22,7 @@ var cfg =
   (if verbose: "" else: " --verbosity:0 --hints:off") &
   " --skipParentCfg --skipUserCfg -f" &
   " --threads:on --opt:speed" &
-  " --chronicles_enabled_topics=sctp:TRACE,dtls:TRACE"
+  " --d:chronicles_enabled_topics=sctp:TRACE,dtls:TRACE"
 
 when defined(windows):
   cfg = cfg & " --clib:ws2_32 --clib:iphlpapi"
