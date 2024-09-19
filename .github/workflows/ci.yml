@@ -68,6 +68,7 @@ jobs:
 
       - name: Run tests
         run: |
+          brew install automake
           git clone https://github.com/sctplab/usrsctp.git
           cd usrsctp
           ./bootstrap
