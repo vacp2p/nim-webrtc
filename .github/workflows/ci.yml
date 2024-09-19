@@ -68,6 +68,13 @@ jobs:
 
       - name: Run tests
         run: |
+          git clone https://github.com/sctplab/usrsctp.git
+          cd usrsctp
+          ./bootstrap
+          ./configure
+          make -d
+          cd ..
+        echo "-------------------------"
           nim --version
           nimble --version
           nimble test
