@@ -40,14 +40,17 @@ type Sctp* = ref object
 
 proc handleAccept(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
   # Callback procedure called when a connection is about to be accepted.
+  echo "======> handle accept"
   var
     sconn: Sockaddr_conn
     slen: Socklen = sizeof(Sockaddr_conn).uint32
+  echo "======> before usrsctp_accept"
   let
     sctp = cast[Sctp](data)
     sctpSocket =
       usrsctp_accept(sctp.sockServer, cast[ptr SockAddr](addr sconn), addr slen)
     conn = cast[SctpConn](sconn.sconn_addr)
+  echo "======> after usrsctp_accept"
 
   if sctpSocket.isNil():
     warn "usrsctp_accept failed", error = sctpStrerror()
@@ -60,6 +63,7 @@ proc handleAccept(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
 
 proc handleConnect(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
   # Callback procedure called during usrsctp_connect
+  echo "======> handle connect"
   let
     conn = cast[SctpConn](data)
     events = usrsctp_get_events(sock)
@@ -73,6 +77,7 @@ proc handleConnect(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
       if usrsctp_set_upcall(conn.sctpSocket, recvCallback, data) != 0:
         warn "usrsctp_set_upcall fails while connecting", error = sctpStrerror()
       trace "Sctp connection connected", remoteAddress = conn.remoteAddress()
+    echo "======> connect event fire"
     conn.connectEvent.fire()
   else:
     warn "Should never happen", currentState = conn.state

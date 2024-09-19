@@ -174,10 +174,13 @@ proc connect*(self: SctpConn, sctpPort: uint16) {.async: (raises: [CancelledErro
   sconn.sconn_family = AF_CONN
   sconn.sconn_port = htons(sctpPort)
   sconn.sconn_addr = cast[pointer](self)
+
+  echo "======> before connect"
   let connErr = self.usrsctpAwait: self.sctpSocket.usrsctp_connect(
     cast[ptr SockAddr](unsafeAddr sconn), SockLen(sizeof(sconn))
   )
   if connErr != 0 and errno != SctpEINPROGRESS:
+    echo "======> after connect (if failed)"
     raise
       newException(WebRtcError, "SCTP - Connection failed: " & sctpStrerror())
 
