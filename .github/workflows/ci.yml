@@ -64,6 +64,7 @@ jobs:
 
       - name: Install deps
         run: |
+          nimble install -dy
           brew install automake
           git clone https://github.com/sctplab/usrsctp.git
           cd usrsctp
@@ -75,7 +76,6 @@ jobs:
           make -d
           cd ..
           echo "-------------------------"
-          nimble install -dy
 
       - name: Run tests
         run: |
