@@ -210,10 +210,12 @@ proc accept*(
   ##
   if not self.isServer:
     raise newException(WebRtcError, "SCTP - Not a server")
+  echo "=======> accept ?"
   var conn: SctpConn
   while true:
     conn = SctpConn.new(await self.dtls.accept())
     conn.acceptEvent.clear()
+    echo "=======> wait accept event"
     await conn.acceptEvent.wait()
     if conn.state == SctpState.SctpConnected and conn.socketSetup(recvCallback):
       break

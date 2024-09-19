@@ -67,6 +67,8 @@ jobs:
           brew install automake
           git clone https://github.com/sctplab/usrsctp.git
           cd usrsctp
+          find /Users/runner/.nimble -name 'user_socket.c'
+          sed -i '1873i printf("WADAFUK %i %i\n", nam->sa_family, AF_CONN);' $(find /Users/runner/.nimble -name 'user_socket.c')
           git checkout 01cc4e042e2235b29d9d489d89728a6f9ac063ed
           ./bootstrap
           ./configure
