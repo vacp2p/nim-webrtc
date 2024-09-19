@@ -74,7 +74,7 @@ jobs:
           ./configure
           make -d
           cd ..
-        echo "-------------------------"
+          echo "-------------------------"
           nim --version
           nimble --version
           nimble test
