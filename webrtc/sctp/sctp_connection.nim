@@ -171,6 +171,8 @@ proc new*(T: typedesc[SctpConn], conn: DtlsConn): T =
 
 proc connect*(self: SctpConn, sctpPort: uint16) {.async: (raises: [CancelledError, WebRtcError]).} =
   var sconn: Sockaddr_conn
+  when compiles(sconn.sconn_len):
+    sconn.sconn_len = sizeof(sconn).uint8
   sconn.sconn_family = AF_CONN
   sconn.sconn_port = htons(sctpPort)
   sconn.sconn_addr = cast[pointer](self)
