@@ -70,7 +70,8 @@ jobs:
           git clone https://github.com/sctplab/usrsctp.git
           cd usrsctp
           git checkout 01cc4e042e2235b29d9d489d89728a6f9ac063ed
-          awk -v n=1873 -v s='printf("WADAFUK %i %i\\n", nam->sa_family, AF_CONN);' 'NR == n {print s} {print}' /Users/runner/.nimble/pkgs/usrsctp-0.0.1/usrsctp/usrsctplib/user_socket.c > file.new
+          awk -v n=1981 -v s='printf("=> %i %i\\n", sa->sa_family, name->sa_family);' 'NR == n {print s} {print}' /Users/runner/.nimble/pkgs/usrsctp-0.0.1/usrsctp/usrsctplib/user_socket.c > file.new
+          awk -v n=1873 -v s='printf("=> %i %i\\n", nam->sa_family, AF_CONN);' 'NR == n {print s} {print}' /Users/runner/.nimble/pkgs/usrsctp-0.0.1/usrsctp/usrsctplib/user_socket.c > file.new
           mv file.new /Users/runner/.nimble/pkgs/usrsctp-0.0.1/usrsctp/usrsctplib/user_socket.c
           cat -n /Users/runner/.nimble/pkgs/usrsctp-0.0.1/usrsctp/usrsctplib/user_socket.c
           ./bootstrap

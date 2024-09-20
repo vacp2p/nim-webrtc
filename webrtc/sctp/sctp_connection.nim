@@ -175,9 +175,9 @@ proc connect*(self: SctpConn, sctpPort: uint16) {.async: (raises: [CancelledErro
   sconn.sconn_port = htons(sctpPort)
   sconn.sconn_addr = cast[pointer](self)
 
-  echo "======> before connect"
+  echo "======> before connect", sconn.sconn_family
   let connErr = self.usrsctpAwait: self.sctpSocket.usrsctp_connect(
-    cast[ptr SockAddr](unsafeAddr sconn), SockLen(sizeof(sconn))
+    cast[ptr SockAddr](addr sconn), SockLen(sizeof(sconn))
   )
   if connErr != 0 and errno != SctpEINPROGRESS:
     echo "======> after connect (if failed)"
