@@ -149,14 +149,14 @@ proc addOnClose*(self: SctpConn, onCloseProc: SctpConnOnClose) =
 
 proc readLoopProc(self: SctpConn) {.async: (raises: [CancelledError, WebRtcError]).} =
   while true:
-    let msg = await self.conn.read()
+    var msg = await self.conn.read()
     if msg == @[]:
       trace "Sctp read loop stopped, DTLS connection closed"
       return
     trace "Receive data",
       remoteAddress = self.conn.remoteAddress(), sctPacket = $(msg.getSctpPacket())
     self.usrsctpAwait:
-      usrsctp_conninput(cast[pointer](self), unsafeAddr msg[0], uint(msg.len), 0)
+      usrsctp_conninput(cast[pointer](self), addr msg[0], uint(msg.len), 0)
 
 proc new*(T: typedesc[SctpConn], conn: DtlsConn): T =
   result = T(
@@ -175,7 +175,7 @@ proc connect*(self: SctpConn, sctpPort: uint16) {.async: (raises: [CancelledErro
   sconn.sconn_port = htons(sctpPort)
   sconn.sconn_addr = cast[pointer](self)
   let connErr = self.usrsctpAwait: self.sctpSocket.usrsctp_connect(
-    cast[ptr SockAddr](unsafeAddr sconn), SockLen(sizeof(sconn))
+    cast[ptr SockAddr](addr sconn), SockLen(sizeof(sconn))
   )
   if connErr != 0 and errno != SctpEINPROGRESS:
     raise
