@@ -65,12 +65,12 @@ jobs:
       - name: Install deps
         run: |
           nimble install -dy
-          git clone https://github.com/sctplab/usrsctp.git
-          cd usrsctp
-          git checkout 01cc4e042e2235b29d9d489d89728a6f9ac063ed
-          nmake VERBOSE=1 -f Makefile.nmake
-          cd ..
-          echo "-------------------------"
+          #git clone https://github.com/sctplab/usrsctp.git
+          #cd usrsctp
+          #git checkout 01cc4e042e2235b29d9d489d89728a6f9ac063ed
+          #nmake VERBOSE=1 -f Makefile.nmake
+          #cd ..
+          #echo "-------------------------"
 
       - name: Run tests
         run: |
