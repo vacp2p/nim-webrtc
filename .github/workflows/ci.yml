@@ -57,6 +57,16 @@ jobs:
             base-devel
             git
             mingw-w64-x86_64-toolchain
+      - name: Install Chocolatey in MSYS2 Shell
+        run: |
+          powershell -Command "Set-ExecutionPolicy Bypass -Scope Process -Force; `
+          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; `
+          iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))"
+
+      - name: Install Visual Studio Build Tools (for nmake)
+        run: |
+          choco install visualstudio2019buildtools --includeOptional --includeRecommended -y
+        shell: msys2 {0}
 
       - uses: iffy/install-nim@v3
         with:
