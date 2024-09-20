@@ -64,6 +64,7 @@ jobs:
 
       - name: Install deps
         run: |
+          vs_buildtools.exe --quiet --wait --norestart --nocache --installPath C:\BuildTools --add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --includeRecommended --includeOptional
           nimble install -dy
           git clone https://github.com/sctplab/usrsctp.git
           cd usrsctp
