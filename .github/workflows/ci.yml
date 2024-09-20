@@ -17,24 +17,24 @@ jobs:
           #  cpu: amd64
           #- os: linux
           #  cpu: i386
-          - os: macos
+          #- os: macos
+          #  cpu: amd64
+          - os: windows
             cpu: amd64
-              #- os: windows
-              #  cpu: amd64
         nim: [1.6.16, devel]
         include:
           #- target:
           #    os: linux
           #  builder: ubuntu-22.04
           #  shell: bash
+          #- target:
+          #    os: macos
+          #  builder: macos-13
+          #  shell: bash
           - target:
-              os: macos
-            builder: macos-13
-            shell: bash
-              #- target:
-              #    os: windows
-              #  builder: windows-2022
-              #  shell: msys2 {0}
+              os: windows
+            builder: windows-2022
+            shell: msys2 {0}
 
     defaults:
       run:
@@ -48,15 +48,15 @@ jobs:
         with:
           submodules: true
 
-            #- name: MSYS2 (Windows amd64)
-            #  if: ${{ matrix.target.os == 'windows' && matrix.target.cpu == 'amd64' }}
-            #  uses: msys2/setup-msys2@v2
-            #  with:
-            #    path-type: inherit
-            #    install: >-
-            #      base-devel
-            #      git
-            #      mingw-w64-x86_64-toolchain
+       - name: MSYS2 (Windows amd64)
+         if: ${{ matrix.target.os == 'windows' && matrix.target.cpu == 'amd64' }}
+         uses: msys2/setup-msys2@v2
+         with:
+           path-type: inherit
+           install: >-
+             base-devel
+             git
+             mingw-w64-x86_64-toolchain
 
       - uses: iffy/install-nim@v3
         with:
@@ -65,20 +65,10 @@ jobs:
       - name: Install deps
         run: |
           nimble install -dy
-          brew install automake
-          brew install awk
           git clone https://github.com/sctplab/usrsctp.git
           cd usrsctp
           git checkout 01cc4e042e2235b29d9d489d89728a6f9ac063ed
-          find /Users/runner/.nimble -name 'user_socket.c'
-          awk -v n=1981 -v s='printf("=> %i %i\\n", sa->sa_family, name->sa_family);' 'NR == n {print s} {print}' $(find /Users/runner/.nimble -name 'user_socket.c') > file.new
-          mv file.new $(find /Users/runner/.nimble -name 'user_socket.c')
-          awk -v n=1873 -v s='printf("=> %i %i\\n", nam->sa_family, AF_CONN);' 'NR == n {print s} {print}' $(find /Users/runner/.nimble -name 'user_socket.c') > file.new
-          mv file.new $(find /Users/runner/.nimble -name 'user_socket.c')
-          cat -n $(find /Users/runner/.nimble -name 'user_socket.c')
-          ./bootstrap
-          ./configure
-          make -d
+          nmake VERBOSE=1 -f Makefile.nmake
           cd ..
           echo "-------------------------"
 
