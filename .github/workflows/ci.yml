@@ -48,15 +48,15 @@ jobs:
         with:
           submodules: true
 
-       - name: MSYS2 (Windows amd64)
-         if: ${{ matrix.target.os == 'windows' && matrix.target.cpu == 'amd64' }}
-         uses: msys2/setup-msys2@v2
-         with:
-           path-type: inherit
-           install: >-
-             base-devel
-             git
-             mingw-w64-x86_64-toolchain
+      - name: MSYS2 (Windows amd64)
+        if: ${{ matrix.target.os == 'windows' && matrix.target.cpu == 'amd64' }}
+        uses: msys2/setup-msys2@v2
+        with:
+          path-type: inherit
+          install: >-
+            base-devel
+            git
+            mingw-w64-x86_64-toolchain
 
       - uses: iffy/install-nim@v3
         with:
@@ -65,12 +65,11 @@ jobs:
       - name: Install deps
         run: |
           nimble install -dy
-          #git clone https://github.com/sctplab/usrsctp.git
-          #cd usrsctp
-          #git checkout 01cc4e042e2235b29d9d489d89728a6f9ac063ed
-          #nmake VERBOSE=1 -f Makefile.nmake
-          #cd ..
-          #echo "-------------------------"
+          git clone https://github.com/sctplab/usrsctp.git
+          cd usrsctp
+          git checkout 01cc4e042e2235b29d9d489d89728a6f9ac063ed
+          nmake VERBOSE=1 -f Makefile.nmake
+          cd ..
 
       - name: Run tests
         run: |
