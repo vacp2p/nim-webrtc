@@ -68,9 +68,10 @@ jobs:
           nimble install -dy
           git clone https://github.com/sctplab/usrsctp.git
           cd usrsctp
+          mkdir cmake_install
           git checkout 01cc4e042e2235b29d9d489d89728a6f9ac063ed
           cmake --version
-          cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON -Dsctp_debug=ON -Dsctp_invariants=ON -Dsctp_inet6=ON -Dsctp_inet=ON -Dsctp_build_programs=ON -Dsctp_build_fuzzer=OFF -DCMAKE_INSTALL_PREFIX=${GITHUB_WORKSPACE}/cmake_install ${GITHUB_WORKSPACE}/usrsctp_source
+          cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON -Dsctp_debug=ON -Dsctp_invariants=ON -Dsctp_inet6=ON -Dsctp_inet=ON -Dsctp_build_programs=ON -Dsctp_build_fuzzer=OFF -DCMAKE_INSTALL_PREFIX=cmake_install .
           cd ..
 
       - name: Run tests
