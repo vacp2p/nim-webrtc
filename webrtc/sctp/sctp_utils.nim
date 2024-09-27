@@ -22,7 +22,7 @@ when defined(windows):
   import winlean
   const
     SctpAF_INET* = winlean.AF_INET
-    SctpEINPROGRESS* = winlean.WSAEINPROGRESS.cint
+    SctpEINPROGRESS* = 112 # ???
 else:
   const
     SctpAF_INET* = nativesockets.AF_INET
