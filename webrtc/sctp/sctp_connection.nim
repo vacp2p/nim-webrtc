@@ -183,7 +183,7 @@ proc connect*(self: SctpConn, sctpPort: uint16) {.async: (raises: [CancelledErro
     cast[ptr SockAddr](addr sconn), SockLen(sizeof(sconn))
   )
   if connErr != 0 and errno != SctpEINPROGRESS:
-    echo "======> after connect (if failed) ", connErr, " ", errno
+    echo "======> after connect (if failed) ", connErr, " ", errno, " ", SctpEINPROGRESS
     raise
       newException(WebRtcError, "SCTP - Connection failed: " & sctpStrerror())
 
