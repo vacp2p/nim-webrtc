@@ -201,7 +201,7 @@ proc new*(
   ##
   var self = T(
     udp: udp,
-    laddr: udp.laddr,
+    laddr: udp.localAddress,
     raddr: raddr,
     closed: false,
     dataRecv: newAsyncQueue[seq[byte]](StunMaxQueuingMessages),
