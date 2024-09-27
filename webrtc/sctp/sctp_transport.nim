@@ -10,7 +10,7 @@
 import tables, bitops, nativesockets, strutils, sequtils
 import usrsctp, chronos, chronicles
 import
-  ./[sctp_connection, sctp_utils], ../errors, ../dtls/[dtls_transport, dtls_connection]
+  ./[sctp_connection, sctp_utils], ../errors, ../dtls/dtls_transport
 
 export chronicles
 
@@ -38,9 +38,10 @@ type Sctp* = ref object
 
 # -- usrsctp accept and connect callbacks --
 
+import posix
 proc handleAccept(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
   # Callback procedure called when a connection is about to be accepted.
-  echo "======> handle accept"
+  echo "======> handle accept", posix.EINPROGRESS
   var
     sconn: Sockaddr_conn
     slen: Socklen = sizeof(Sockaddr_conn).uint32
