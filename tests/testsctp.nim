@@ -30,8 +30,8 @@ suite "SCTP":
       sctp: Sctp
 
   proc initSctpStack(localAddress: TransportAddress): SctpStackForTest =
-    result.localAddress = localAddress
     result.udp = UdpTransport.new(result.localAddress)
+    result.localAddress = result.udp.localAddress()
     result.stun = Stun.new(result.udp)
     result.dtls = Dtls.new(result.stun)
     result.sctp = Sctp.new(result.dtls)
@@ -45,8 +45,8 @@ suite "SCTP":
 
   asyncTest "Two SCTP nodes connecting to each other, then sending/receiving data":
     var
-      sctpServer = initSctpStack(initTAddress("127.0.0.1:4444"))
-      sctpClient = initSctpStack(initTAddress("127.0.0.1:5555"))
+      sctpServer = initSctpStack(initTAddress("0.0.0.0:0"))
+      sctpClient = initSctpStack(initTAddress("0.0.0.0:0"))
     echo "Before Accept"
     let serverConnFut = sctpServer.sctp.accept()
     echo "Before Connect"
