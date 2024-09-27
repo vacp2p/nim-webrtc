@@ -10,6 +10,7 @@
 import nativesockets, bitops, sequtils
 import usrsctp, chronos, chronicles, stew/[ptrops, endians2, byteutils]
 import ./sctp_utils, ../errors, ../dtls/dtls_connection
+from posix import EINPROGRESS
 
 logScope:
   topics = "webrtc sctp sctp_connection"
@@ -182,8 +183,8 @@ proc connect*(self: SctpConn, sctpPort: uint16) {.async: (raises: [CancelledErro
   let connErr = self.usrsctpAwait: self.sctpSocket.usrsctp_connect(
     cast[ptr SockAddr](addr sconn), SockLen(sizeof(sconn))
   )
-  if connErr != 0 and errno != SctpEINPROGRESS:
-    echo "======> after connect (if failed) ", connErr, " ", errno, " ", SctpEINPROGRESS
+  if connErr != 0 and errno != posix.EINPROGRESS:
+    echo "======> after connect (if failed) ", connErr, " ", errno, " ", posix.EINPROGRESS
     raise
       newException(WebRtcError, "SCTP - Connection failed: " & sctpStrerror())
 

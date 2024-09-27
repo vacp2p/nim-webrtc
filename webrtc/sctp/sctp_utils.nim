@@ -18,16 +18,6 @@ proc sctpPrintf*(
 
 var errno* {.importc, header: "<errno.h>".}: cint ## error variable
 
-when defined(windows):
-  import winlean
-  const
-    SctpAF_INET* = winlean.AF_INET
-    SctpEINPROGRESS* = 112 # ???
-else:
-  const
-    SctpAF_INET* = nativesockets.AF_INET
-    SctpEINPROGRESS* = chronos.EINPROGRESS.cint
-
 type
   # These three objects are used for debugging/trace only
   SctpChunk* = object

@@ -11,6 +11,7 @@ import tables, bitops, nativesockets, strutils, sequtils
 import usrsctp, chronos, chronicles
 import
   ./[sctp_connection, sctp_utils], ../errors, ../dtls/dtls_transport
+from posix import AF_INET
 
 export chronicles
 
@@ -113,7 +114,7 @@ proc serverSetup(self: Sctp, sctpPort: uint16): bool =
     return false
 
   var sin: Sockaddr_in
-  sin.sin_family = type(sin.sin_family)(SctpAF_INET)
+  sin.sin_family = type(sin.sin_family)(posix.AF_INET)
   sin.sin_port = htons(sctpPort)
   sin.sin_addr.s_addr = htonl(INADDR_ANY)
   if usrsctp_bind(sock, cast[ptr SockAddr](addr sin), SockLen(sizeof(Sockaddr_in))) != 0:
