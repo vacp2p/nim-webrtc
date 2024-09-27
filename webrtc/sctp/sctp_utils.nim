@@ -10,6 +10,12 @@
 import nativesockets
 import binary_serialization, chronos
 
+{.compile: "sctp_utils.c".}
+
+proc sctpPrintf*(
+  format: cstring
+) {.cdecl, importc: "sctpPrintf", varargs, gcsafe.}
+
 var errno* {.importc, header: "<errno.h>".}: cint ## error variable
 
 when defined(windows):
