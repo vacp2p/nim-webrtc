@@ -30,7 +30,7 @@ when defined(windows):
 import hashes
 
 proc buildExample(filename: string, run = false, extraFlags = "") =
-  var excstr = nimc & " " & lang & " " & flags & " -p:. " & extraFlags
+  var excstr = nimc & " " & lang & cfg & " " & flags & " -p:. " & extraFlags
   excstr.add(" examples/" & filename)
   exec excstr
   if run:
