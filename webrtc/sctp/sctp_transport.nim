@@ -38,7 +38,7 @@ type Sctp* = ref object
 
 # -- usrsctp accept and connect callbacks --
 
-import posix
+from posix import EINPROGRESS
 proc handleAccept(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
   # Callback procedure called when a connection is about to be accepted.
   echo "======> handle accept", posix.EINPROGRESS
