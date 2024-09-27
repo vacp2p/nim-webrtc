@@ -148,10 +148,7 @@ proc new*(T: type Sctp, dtls: Dtls): T =
   var self = T()
   self.dtls = dtls
 
-  when defined(windows):
-    usrsctp_init_nothreads(dtls.localAddress.port.uint16, sendCallback, nil)
-  else:
-    usrsctp_init_nothreads(dtls.localAddress.port.uint16, sendCallback, printf)
+  usrsctp_init_nothreads(dtls.localAddress.port.uint16, sendCallback, printf)
   if usrsctp_sysctl_set_sctp_debug_on(SCTP_DEBUG_ALL.uint32) != 0:
     # Enabling debug is not critical, doesn't matter if it fails
     trace "usrsctp_sysctl_set_sctp_debug_on failed", error = sctpStrerror()
