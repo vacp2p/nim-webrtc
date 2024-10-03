@@ -39,10 +39,15 @@ suite "SCTP":
     result.sctp.listen()
 
   proc closeSctpStack(self: SctpStackForTest) {.async: (raises: [CancelledError]).} =
+    echo "=> 1"
     await self.sctp.stop()
+    echo "=> 2"
     await self.dtls.stop()
+    echo "=> 3"
     await self.stun.stop()
+    echo "=> 4"
     await self.udp.close()
+    echo "=> 5"
 
 #  asyncTest "Two SCTP nodes connecting to each other, then sending/receiving data":
 #    var
@@ -105,7 +110,9 @@ suite "SCTP":
     await allFutures(clientConn2.close(), serverConn2.close())
 
     echo "==========> Read second"
-    await allFutures(sctpClient1.closeSctpStack(),
-                     sctpClient2.closeSctpStack(),
-                     sctpServer.closeSctpStack())
+    await sctpClient1.closeSctpStack()
+    echo "1"
+    await sctpClient2.closeSctpStack()
+    echo "2"
+    await sctpServer.closeSctpStack()
     echo "==========> END"
