@@ -20,6 +20,7 @@ import ./asyncunit
 suite "SCTP":
   teardown:
     checkLeaks()
+    echo "TEARDOWN"
 
   type
     SctpStackForTest = object
@@ -107,3 +108,4 @@ suite "SCTP":
     await allFutures(sctpClient1.closeSctpStack(),
                      sctpClient2.closeSctpStack(),
                      sctpServer.closeSctpStack())
+    echo "==========> END"
