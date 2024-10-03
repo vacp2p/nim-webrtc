@@ -167,13 +167,18 @@ proc new*(T: type Sctp, dtls: Dtls): T =
 proc stop*(self: Sctp) {.async: (raises: [CancelledError]).} =
   ## Stops the Sctp Transport
   ##
+  echo "==> stop 1 isServer? ", self.isServer
   if self.isServer:
     self.stopServer()
   untrackCounter(SctpTransportTracker)
+  echo "==> stop 2"
   let connections = toSeq(self.connections.values())
+  echo "==> stop 3 ", connections.len()
   await allFutures(connections.mapIt(it.close()))
+  echo "==> stop 4"
   if usrsctp_finish() != 0:
     warn "usrsct_finish failed", error = sctpStrerror()
+  echo "==> stop 5"
 
 proc socketSetup(
     conn: SctpConn, callback: proc(a1: ptr socket, a2: pointer, a3: cint) {.cdecl.}
