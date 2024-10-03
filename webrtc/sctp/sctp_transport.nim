@@ -88,11 +88,15 @@ proc handleConnect(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
 proc stopServer*(self: Sctp) =
   ## Sctp Transport stop acting like a server
   ##
+  echo "====> stopServer 1"
   if not self.isServer:
     trace "Try to close a client"
     return
+  echo "====> stopServer 2"
   self.isServer = false
+  echo "====> stopServer 3", cast[uint64](cast[pointer](self.sockServer))
   self.sockServer.usrsctp_close()
+  echo "====> stopServer 4"
 
 proc serverSetup(self: Sctp, sctpPort: uint16): bool =
   # This procedure setup usrsctp to be in "server mode" and
