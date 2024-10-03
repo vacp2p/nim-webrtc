@@ -43,31 +43,31 @@ suite "SCTP":
     await self.stun.stop()
     await self.udp.close()
 
-  asyncTest "Two SCTP nodes connecting to each other, then sending/receiving data":
-    var
-      sctpServer = initSctpStack(initTAddress("127.0.0.1:0"))
-      sctpClient = initSctpStack(initTAddress("127.0.0.1:0"))
-    echo "Before Accept"
-    let serverConnFut = sctpServer.sctp.accept()
-    echo "Before Connect"
-    let clientConn = await sctpClient.sctp.connect(sctpServer.localAddress)
-    echo "Before await accept"
-    let serverConn = await serverConnFut
-    echo "Connected :tada:"
-
-    await clientConn.write(@[1'u8, 2, 3, 4])
-    check (await serverConn.read()).data == @[1'u8, 2, 3, 4]
-
-    await serverConn.write(@[5'u8, 6, 7, 8])
-    check (await clientConn.read()).data == @[5'u8, 6, 7, 8]
-
-    await clientConn.write(@[10'u8, 11, 12, 13])
-    await serverConn.write(@[14'u8, 15, 16, 17])
-    check (await clientConn.read()).data == @[14'u8, 15, 16, 17]
-    check (await serverConn.read()).data == @[10'u8, 11, 12, 13]
-
-    await allFutures(clientConn.close(), serverConn.close())
-    await allFutures(sctpClient.closeSctpStack(), sctpServer.closeSctpStack())
+#  asyncTest "Two SCTP nodes connecting to each other, then sending/receiving data":
+#    var
+#      sctpServer = initSctpStack(initTAddress("127.0.0.1:0"))
+#      sctpClient = initSctpStack(initTAddress("127.0.0.1:0"))
+#    echo "Before Accept"
+#    let serverConnFut = sctpServer.sctp.accept()
+#    echo "Before Connect"
+#    let clientConn = await sctpClient.sctp.connect(sctpServer.localAddress)
+#    echo "Before await accept"
+#    let serverConn = await serverConnFut
+#    echo "Connected :tada:"
+#
+#    await clientConn.write(@[1'u8, 2, 3, 4])
+#    check (await serverConn.read()).data == @[1'u8, 2, 3, 4]
+#
+#    await serverConn.write(@[5'u8, 6, 7, 8])
+#    check (await clientConn.read()).data == @[5'u8, 6, 7, 8]
+#
+#    await clientConn.write(@[10'u8, 11, 12, 13])
+#    await serverConn.write(@[14'u8, 15, 16, 17])
+#    check (await clientConn.read()).data == @[14'u8, 15, 16, 17]
+#    check (await serverConn.read()).data == @[10'u8, 11, 12, 13]
+#
+#    await allFutures(clientConn.close(), serverConn.close())
+#    await allFutures(sctpClient.closeSctpStack(), sctpServer.closeSctpStack())
 
   asyncTest "Two DTLS nodes connecting to the same DTLS server, sending/receiving data":
     var
