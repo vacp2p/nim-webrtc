@@ -30,13 +30,14 @@ suite "SCTP":
       dtls: Dtls
       sctp: Sctp
 
-  proc initSctpStack(la: TransportAddress): SctpStackForTest =
+  proc initSctpStack(la: TransportAddress, isServer: bool): SctpStackForTest =
     result.udp = UdpTransport.new(la)
     result.localAddress = result.udp.localAddress()
     result.stun = Stun.new(result.udp)
     result.dtls = Dtls.new(result.stun)
     result.sctp = Sctp.new(result.dtls)
-    result.sctp.listen()
+    if isServer:
+      result.sctp.listen()
 
   proc closeSctpStack(self: SctpStackForTest) {.async: (raises: [CancelledError]).} =
     echo "=> 1"
@@ -78,9 +79,9 @@ suite "SCTP":
   asyncTest "Two DTLS nodes connecting to the same DTLS server, sending/receiving data":
     echo "==========> Second test"
     var
-      sctpServer = initSctpStack(initTAddress("127.0.0.1:0"))
-      sctpClient1 = initSctpStack(initTAddress("127.0.0.1:0"))
-      sctpClient2 = initSctpStack(initTAddress("127.0.0.1:0"))
+      sctpServer = initSctpStack(initTAddress("127.0.0.1:0"), true)
+      sctpClient1 = initSctpStack(initTAddress("127.0.0.1:0"), false)
+      sctpClient2 = initSctpStack(initTAddress("127.0.0.1:0"), false)
     let
       serverConn1Fut = sctpServer.sctp.accept()
       serverConn2Fut = sctpServer.sctp.accept()

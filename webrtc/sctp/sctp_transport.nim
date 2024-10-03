@@ -94,7 +94,7 @@ proc stopServer*(self: Sctp) =
     return
   echo "====> stopServer 2"
   self.isServer = false
-  echo "====> stopServer 3", cast[uint64](cast[pointer](self.sockServer))
+  echo "====> stopServer 3 ", cast[uint64](cast[pointer](self.sockServer))
   self.sockServer.usrsctp_close()
   echo "====> stopServer 4"
 
