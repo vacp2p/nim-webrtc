@@ -84,10 +84,10 @@ suite "SCTP":
       sctpClient2 = initSctpStack(initTAddress("127.0.0.1:0"), false)
     let
       serverConn1Fut = sctpServer.sctp.accept()
-      serverConn2Fut = sctpServer.sctp.accept()
       clientConn1 = await sctpClient1.sctp.connect(sctpServer.localAddress)
-      clientConn2 = await sctpClient2.sctp.connect(sctpServer.localAddress)
       serverConn1 = await serverConn1Fut
+      serverConn2Fut = sctpServer.sctp.accept()
+      clientConn2 = await sctpClient2.sctp.connect(sctpServer.localAddress)
       serverConn2 = await serverConn2Fut
 
     echo "==========> Connected"
