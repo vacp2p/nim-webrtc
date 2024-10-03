@@ -138,6 +138,7 @@ proc serverSetup(self: Sctp, sctpPort: uint16): bool =
     return false
 
   self.sockServer = sock
+  echo "sockServer: ", cast[uint64](cast[pointer](self.sockServer))
   return true
 
 proc listen*(self: Sctp, sctpPort: uint16 = 5000) =
