@@ -70,6 +70,7 @@ suite "SCTP":
 #    await allFutures(sctpClient.closeSctpStack(), sctpServer.closeSctpStack())
 
   asyncTest "Two DTLS nodes connecting to the same DTLS server, sending/receiving data":
+    echo "==========> Second test"
     var
       sctpServer = initSctpStack(initTAddress("127.0.0.1:0"))
       sctpClient1 = initSctpStack(initTAddress("127.0.0.1:0"))
@@ -82,6 +83,7 @@ suite "SCTP":
       serverConn1 = await serverConn1Fut
       serverConn2 = await serverConn2Fut
 
+    echo "==========> Connected"
     await serverConn1.write(@[1'u8, 2, 3, 4])
     await serverConn2.write(@[5'u8, 6, 7, 8])
     await clientConn1.write(@[9'u8, 10, 11, 12])
@@ -91,6 +93,7 @@ suite "SCTP":
       (await clientConn2.read()).data == @[5'u8, 6, 7, 8]
       (await serverConn1.read()).data == @[9'u8, 10, 11, 12]
       (await serverConn2.read()).data == @[13'u8, 14, 15, 16]
+    echo "==========> Read first"
     await allFutures(clientConn1.close(), serverConn1.close())
 
     await serverConn2.write(@[5'u8, 6, 7, 8])
@@ -100,6 +103,7 @@ suite "SCTP":
       (await serverConn2.read()).data == @[13'u8, 14, 15, 16]
     await allFutures(clientConn2.close(), serverConn2.close())
 
+    echo "==========> Read second"
     await allFutures(sctpClient1.closeSctpStack(),
                      sctpClient2.closeSctpStack(),
                      sctpServer.closeSctpStack())
