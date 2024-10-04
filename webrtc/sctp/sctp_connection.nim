@@ -53,7 +53,6 @@ type
     conn: DtlsConn # Underlying DTLS Connection
     sctpSocket*: ptr socket # Current usrsctp socket
 
-
     state*: SctpState # Current Sctp State
     onClose: seq[SctpConnOnClose] # List of procedure to run while closing a connection
 
