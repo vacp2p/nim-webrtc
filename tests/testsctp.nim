@@ -29,9 +29,9 @@ suite "SCTP":
       dtls: Dtls
       sctp: Sctp
 
-  proc initSctpStack(localAddress: TransportAddress): SctpStackForTest =
-    result.localAddress = localAddress
-    result.udp = UdpTransport.new(result.localAddress)
+  proc initSctpStack(la: TransportAddress): SctpStackForTest =
+    result.udp = UdpTransport.new(la)
+    result.localAddress = result.udp.localAddress()
     result.stun = Stun.new(result.udp)
     result.dtls = Dtls.new(result.stun)
     result.sctp = Sctp.new(result.dtls)
@@ -45,8 +45,8 @@ suite "SCTP":
 
   asyncTest "Two SCTP nodes connecting to each other, then sending/receiving data":
     var
-      sctpServer = initSctpStack(initTAddress("127.0.0.1:4444"))
-      sctpClient = initSctpStack(initTAddress("127.0.0.1:5555"))
+      sctpServer = initSctpStack(initTAddress("127.0.0.1:0"))
+      sctpClient = initSctpStack(initTAddress("127.0.0.1:0"))
     let
       serverConnFut = sctpServer.sctp.accept()
       clientConn = await sctpClient.sctp.connect(sctpServer.localAddress)
@@ -68,9 +68,9 @@ suite "SCTP":
 
   asyncTest "Two DTLS nodes connecting to the same DTLS server, sending/receiving data":
     var
-      sctpServer = initSctpStack(initTAddress("127.0.0.1:4444"))
-      sctpClient1 = initSctpStack(initTAddress("127.0.0.1:5555"))
-      sctpClient2 = initSctpStack(initTAddress("127.0.0.1:6666"))
+      sctpServer = initSctpStack(initTAddress("127.0.0.1:0"))
+      sctpClient1 = initSctpStack(initTAddress("127.0.0.1:0"))
+      sctpClient2 = initSctpStack(initTAddress("127.0.0.1:0"))
     let
       serverConn1Fut = sctpServer.sctp.accept()
       serverConn2Fut = sctpServer.sctp.accept()
