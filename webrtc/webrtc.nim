@@ -9,36 +9,41 @@
 
 import chronos, chronicles
 
-import udp_connection
-import stun/stun_connection
-import dtls/dtls
-import sctp, datachannel
+import udp_transport
+import stun/stun_transport
+import dtls/dtls_transport
+import sctp/sctp_transport
+import datachannel
+import errors
 
 logScope:
   topics = "webrtc"
 
-type
-  WebRTC* = ref object
-    udp*: UdpConn
-    stun*: StunConn
-    dtls*: Dtls
-    sctp*: Sctp
-    port: int
+type WebRTC* = ref object
+  udp: UdpTransport
+  stun: Stun
+  dtls: Dtls
+  sctp: Sctp
+  port: int
 
 proc new*(T: typedesc[WebRTC], address: TransportAddress): T =
-  result = T(udp: UdpConn(), stun: StunConn(), dtls: Dtls(), sctp: Sctp())
-  result.udp.init(address)
-  result.stun.init(result.udp, address)
-  result.dtls.init(result.stun, address)
-  result.sctp.init(result.dtls, address)
+  result = T()
+  result = UdpTransport.new(address)
+  result = Stun.new(result.udp)
+  result = Dtls.new(result.stun)
+  result = Sctp.new(result.dtls)
 
 proc listen*(self: WebRTC) =
   self.sctp.listen()
 
-proc connect*(self: WebRTC, raddr: TransportAddress): Future[DataChannelConnection] {.async.} =
+proc connect*(
+    self: WebRTC, raddr: TransportAddress
+): Future[DataChannelConnection] {.async: (raises: [CancelledError, WebRtcError]).} =
   let sctpConn = await self.sctp.connect(raddr) # TODO: Port?
   result = DataChannelConnection.new(sctpConn)
 
-proc accept*(w: WebRTC): Future[DataChannelConnection] {.async.} =
+proc accept*(
+    w: WebRTC
+): Future[DataChannelConnection] {.async: (raises: [CancelledError, WebRtcError]).} =
   let sctpConn = await w.sctp.accept()
   result = DataChannelConnection.new(sctpConn)
