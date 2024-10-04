@@ -24,6 +24,8 @@ var cfg =
   " --threads:on --opt:speed"
 
 when defined(windows):
+  # ws2_32 is required by MbedTLS and usrsctp
+  # iphlpapi is required by usrsctp
   cfg = cfg & " --clib:ws2_32 --clib:iphlpapi"
 
 import hashes
