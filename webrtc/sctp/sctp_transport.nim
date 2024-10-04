@@ -94,7 +94,7 @@ proc stopServer*(self: Sctp) =
     return
   echo "====> stopServer 2"
   self.isServer = false
-  echo "====> stopServer 3 ", cast[uint64](cast[pointer](self.sockServer))
+  echo "====> stopServer 3 ", cast[uint64](cast[pointer](self.sockServer)), " ", sizeof(self.sockServer)
   self.sockServer.usrsctp_close()
   echo "====> stopServer 4"
 
@@ -137,6 +137,7 @@ proc serverSetup(self: Sctp, sctpPort: uint16): bool =
     warn "usrsctp_set_upcall failed", error = sctpStrerror()
     return false
 
+  echo "????????????????????"
   self.sockServer = sock
   echo "sockServer: ", cast[uint64](cast[pointer](self.sockServer))
   return true

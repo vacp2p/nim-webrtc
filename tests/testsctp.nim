@@ -33,11 +33,11 @@ suite "SCTP":
   proc initSctpStack(la: TransportAddress, isServer: bool): SctpStackForTest =
     result.udp = UdpTransport.new(la)
     result.localAddress = result.udp.localAddress()
+    echo result.localAddress
     result.stun = Stun.new(result.udp)
     result.dtls = Dtls.new(result.stun)
     result.sctp = Sctp.new(result.dtls)
-    if isServer:
-      result.sctp.listen()
+    result.sctp.listen()
 
   proc closeSctpStack(self: SctpStackForTest) {.async: (raises: [CancelledError]).} =
     echo "=> 1"
