@@ -13,24 +13,24 @@ jobs:
       fail-fast: false
       matrix:
         target:
-          - os: linux
-            cpu: amd64
-          - os: linux
-            cpu: i386
-          - os: macos
-            cpu: amd64
+          #- os: linux
+          #  cpu: amd64
+          #- os: linux
+          #  cpu: i386
+          #- os: macos
+          #  cpu: amd64
           - os: windows
             cpu: amd64
         nim: [1.6.16, devel]
         include:
-          - target:
-              os: linux
-            builder: ubuntu-22.04
-            shell: bash
-          - target:
-              os: macos
-            builder: macos-13
-            shell: bash
+          #- target:
+          #    os: linux
+          #  builder: ubuntu-22.04
+          #  shell: bash
+          #- target:
+          #    os: macos
+          #  builder: macos-13
+          #  shell: bash
           - target:
               os: windows
             builder: windows-2022
@@ -65,6 +65,17 @@ jobs:
       - name: Install deps
         run: |
           nimble install -dy
+          #          git clone https://github.com/sctplab/usrsctp.git
+          #          cd usrsctp
+          #          mkdir cmake_install
+          #          mkdir cmake_build
+          #          git checkout 01cc4e042e2235b29d9d489d89728a6f9ac063ed
+          #          cmake --version
+          #          ls -la
+          #          cmake -S . -B cmake_build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON -Dsctp_debug=ON -Dsctp_invariants=ON -Dsctp_inet6=ON -Dsctp_inet=ON -Dsctp_build_programs=ON -Dsctp_build_fuzzer=OFF -DCMAKE_INSTALL_PREFIX=cmake_install -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_SYSTEM_PROCESSOR=x86_64 .
+          #          echo "install done"
+          #          cmake --build cmake_build --parallel 2 --config Debug --target install --clean-first --verbose
+          #          cd ..
 
       - name: Run tests
         run: |

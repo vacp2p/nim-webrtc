@@ -19,7 +19,7 @@ import
   ./[dtls_utils, dtls_connection], ../errors, ../stun/[stun_connection, stun_transport]
 
 logScope:
-  topics = "webrtc dtls"
+  topics = "webrtc dtls dtls_transport"
 
 # Implementation of a DTLS client and a DTLS Server by using the Mbed-TLS library.
 # Multiple things here are unintuitive partly because of the callbacks
