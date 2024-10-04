@@ -25,10 +25,24 @@ type
     SctpClosed
 
   SctpMessageParameters* = object
+    # This object is used to help manage messages exchanged over SCTP
+    # within the DataChannel stack.
     protocolId*: uint32
+    # protocolId is used to distinguish different protocols within
+    # SCTP stream. In WebRTC, this is used to define the type of application
+    # data being transferred (text data, binary data...).
     streamId*: uint16
+    # streamId identifies the specific SCTP stream. In WebRTC, each
+    # DataChannel corresponds to a different stream, so the streamId is
+    # used to map the message to the appropriate DataChannel.
     endOfRecord*: bool
+    # endOfRecord indicates whether the current SCTP message is the
+    # final part of a record or not. This is related to the
+    # fragmentation and reassembly of messages.
     unordered*: bool
+    # The unordered flag determines whether the message should be
+    # delivered in order or not. SCTP allows for both ordered and
+    # unordered delivery of messages.
 
   SctpMessage* = ref object
     data*: seq[byte]
@@ -36,15 +50,21 @@ type
     params*: SctpMessageParameters
 
   SctpConn* = ref object
-    conn: DtlsConn
-    state*: SctpState
-    onClose: seq[SctpConnOnClose]
-    connectEvent*: AsyncEvent
-    acceptEvent*: AsyncEvent
+    conn: DtlsConn # Underlying DTLS Connection
+    sctpSocket*: ptr socket # Current usrsctp socket
+
+
+    state*: SctpState # Current Sctp State
+    onClose: seq[SctpConnOnClose] # List of procedure to run while closing a connection
+
+    connectEvent*: AsyncEvent # Event fired when the connection is connected
+    acceptEvent*: AsyncEvent # Event fired when the connection is accepted
+
+    # Infinite loop reading on the underlying DTLS Connection.
     readLoop: Future[void].Raising([CancelledError, WebRtcError])
-    sctpSocket*: ptr socket
-    dataRecv: AsyncQueue[SctpMessage]
-    sendQueue: seq[byte]
+
+    dataRecv: AsyncQueue[SctpMessage] # Queue of messages to be read
+    sendQueue: seq[byte] # Queue of messages to be sent
 
 proc remoteAddress*(self: SctpConn): TransportAddress =
   if self.conn.isNil():
@@ -106,7 +126,6 @@ proc recvCallback*(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
       warn "usrsctp_recvv", error = sctpStrerror()
       return
     elif n > 0:
-      # It might be necessary to check if infotype == SCTP_RECVV_RCVINFO
       message.data.delete(n ..< message.data.len())
       trace "message info from handle upcall", msginfo = message.info
       message.params = SctpMessageParameters(
