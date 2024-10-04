@@ -24,9 +24,19 @@ var cfg =
   " --threads:on --opt:speed"
 
 when defined(windows):
-  cfg = cfg & " --clib:ws2_32"
+  # ws2_32 is required by MbedTLS and usrsctp
+  # iphlpapi is required by usrsctp
+  cfg = cfg & " --clib:ws2_32 --clib:iphlpapi"
 
 import hashes
+
+proc buildExample(filename: string, run = false, extraFlags = "") =
+  var excstr = nimc & " " & lang & " " & flags & " -p:. " & extraFlags
+  excstr.add(" examples/" & filename)
+  exec excstr
+  if run:
+    exec "./examples/" & filename.toExe
+  rmFile "examples/" & filename.toExe
 
 proc runTest(filename: string) =
   var excstr = nimc & " " & lang & " -d:debug " & cfg & " " & flags
@@ -36,5 +46,9 @@ proc runTest(filename: string) =
   exec excstr & " -r " & " tests/" & filename
   rmFile "tests/" & filename.toExe
 
-task test, "Run test":
+task test, "Run the test suite":
   runTest("runalltests")
+
+task build_examples, "Build the examples":
+  buildExample("ping")
+  buildExample("pong")

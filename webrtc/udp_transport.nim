@@ -23,7 +23,7 @@ type
     raddr: TransportAddress
 
   UdpTransport* = ref object
-    laddr*: TransportAddress
+    laddr: TransportAddress
     udp: DatagramTransport
     dataRecv: AsyncQueue[UdpPacketInfo]
     closed: bool
@@ -33,7 +33,7 @@ const UdpTransportTrackerName* = "webrtc.udp.transport"
 proc new*(T: type UdpTransport, laddr: TransportAddress): T =
   ## Initialize an Udp Transport
   ##
-  var self = T(laddr: laddr, closed: false)
+  var self = T(closed: false)
 
   proc onReceive(
       udp: DatagramTransport,
@@ -49,6 +49,7 @@ proc new*(T: type UdpTransport, laddr: TransportAddress): T =
 
   self.dataRecv = newAsyncQueue[UdpPacketInfo]()
   self.udp = newDatagramTransport(onReceive, local = laddr)
+  self.laddr = self.udp.localAddress()
   trackCounter(UdpTransportTrackerName)
   return self
 
@@ -87,3 +88,6 @@ proc read*(self: UdpTransport): Future[UdpPacketInfo] {.async: (raises: [Cancell
     return
   trace "UDP read"
   return await self.dataRecv.popFirst()
+
+proc localAddress*(self: UdpTransport): TransportAddress =
+  self.laddr

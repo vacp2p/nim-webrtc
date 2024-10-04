@@ -71,3 +71,7 @@ jobs:
           nim --version
           nimble --version
           nimble test
+
+      - name: Build examples
+        run: |
+          nimble build_examples

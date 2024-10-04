@@ -9,5 +9,8 @@
 
 {.used.}
 
+{.passc: "-DSCTP_DEBUG".}
+
 import teststun
 import testdtls
+import testsctp
