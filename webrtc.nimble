@@ -46,8 +46,7 @@ proc runTest(filename: string) =
 
 task test, "Run the test suite":
   runTest("runalltests")
-  exec "nimble build_example"
 
-task build_example, "Build the examples":
+task build_examples, "Build the examples":
   buildExample("ping")
   buildExample("pong")
