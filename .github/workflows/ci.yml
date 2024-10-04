@@ -25,15 +25,15 @@ jobs:
         include:
           - target:
               os: linux
-            builder: ubuntu-20.04
+            builder: ubuntu-22.04
             shell: bash
           - target:
               os: macos
-            builder: macos-12
+            builder: macos-13
             shell: bash
           - target:
               os: windows
-            builder: windows-2019
+            builder: windows-2022
             shell: msys2 {0}
 
     defaults:
@@ -48,10 +48,19 @@ jobs:
         with:
           submodules: true
 
+      - name: MSYS2 (Windows amd64)
+        if: ${{ matrix.target.os == 'windows' && matrix.target.cpu == 'amd64' }}
+        uses: msys2/setup-msys2@v2
+        with:
+          path-type: inherit
+          install: >-
+            base-devel
+            git
+            mingw-w64-x86_64-toolchain
+
       - uses: iffy/install-nim@v3
         with:
           version: ${{ matrix.nim }}
-
 
       - name: Install deps
         run: |
@@ -62,5 +71,3 @@ jobs:
           nim --version
           nimble --version
           nimble test
-          # nim c examples/ping.nim
-          # nim c examples/pong.nim

@@ -7,8 +7,6 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-{.used.}
-
-import teststun
-import testdtls
-import testdatachannel
+type
+  # Base exception for nim-webrtc
+  WebRtcError* = object of CatchableError
