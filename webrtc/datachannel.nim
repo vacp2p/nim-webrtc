@@ -39,7 +39,8 @@ type
   DataChannelMessage* = object
     case messageType*: DataChannelMessageType
     of Open: openMessage*: DataChannelOpenMessage
-    else: discard
+    else:
+      discard
 
   DataChannelType {.size: 1.} = enum
     Reliable = 0x00
@@ -81,19 +82,20 @@ type
     conn*: SctpConn
     incomingStreams: AsyncQueue[DataChannelStream]
 
-proc read*(stream: DataChannelStream): Future[seq[byte]] {.async: (raises: [CancelledError]).} =
+proc read*(
+    stream: DataChannelStream
+): Future[seq[byte]] {.async: (raises: [CancelledError]).} =
   let x = await stream.receivedData.popFirst()
-  trace "read", length=x.len(), id=stream.id
+  trace "read", length = x.len(), id = stream.id
   return x
 
-proc write*(stream: DataChannelStream, buf: seq[byte]) {.async: (raises: [CancelledError, WebRtcError]).} =
-  trace "write", length=buf.len(), id=stream.id
-  var
-    sendInfo = SctpMessageParameters(
-      streamId: stream.id,
-      endOfRecord: true,
-      protocolId: uint32(WebRtcBinary)
-    )
+proc write*(
+    stream: DataChannelStream, buf: seq[byte]
+) {.async: (raises: [CancelledError, WebRtcError]).} =
+  trace "write", length = buf.len(), id = stream.id
+  var sendInfo = SctpMessageParameters(
+    streamId: stream.id, endOfRecord: true, protocolId: uint32(WebRtcBinary)
+  )
 
   if stream.acked:
     sendInfo.unordered = not stream.reliability.ordered
@@ -106,13 +108,13 @@ proc write*(stream: DataChannelStream, buf: seq[byte]) {.async: (raises: [Cancel
   else:
     await stream.conn.write(buf, sendInfo)
 
-proc sendControlMessage(stream: DataChannelStream, msg: DataChannelMessage) {.async: (raises: [CancelledError, WebRtcError]).} =
+proc sendControlMessage(
+    stream: DataChannelStream, msg: DataChannelMessage
+) {.async: (raises: [CancelledError, WebRtcError]).} =
   let
     encoded = Binary.encode(msg)
     sendInfo = SctpMessageParameters(
-      streamId: stream.id,
-      endOfRecord: true,
-      protocolId: uint32(WebRtcDcep)
+      streamId: stream.id, endOfRecord: true, protocolId: uint32(WebRtcDcep)
     )
   trace "send control message", msg
 
@@ -123,9 +125,11 @@ proc closeStream*(stream: DataChannelStream) {.async.} =
   discard
 
 proc openStream*(
-  conn: DataChannelConnection,
-  noiseHandshake: bool,
-  reliability = Reliable, reliabilityParameter: uint32 = 0): Future[DataChannelStream] {.async.} =
+    conn: DataChannelConnection,
+    noiseHandshake: bool,
+    reliability = Reliable,
+    reliabilityParameter: uint32 = 0,
+): Future[DataChannelStream] {.async.} =
   let streamId: uint16 =
     if not noiseHandshake:
       let res = conn.streamId
@@ -145,26 +149,27 @@ proc openStream*(
   # https://github.com/sctplab/usrsctp/blob/a0cbf4681474fab1e89d9e9e2d5c3694fce50359/programs/rtcweb.c#L304C16-L304C16
 
   var stream = DataChannelStream(
-      id: streamId, conn: conn.conn,
-      reliability: reliability,
-      reliabilityParameter: reliabilityParameter,
-      receivedData: newAsyncQueue[seq[byte]]()
+    id: streamId,
+    conn: conn.conn,
+    reliability: reliability,
+    reliabilityParameter: reliabilityParameter,
+    receivedData: newAsyncQueue[seq[byte]](),
   )
 
   conn.streams[streamId] = stream
 
-  let
-    msg = DataChannelMessage(
-      messageType: Open,
-      openMessage: DataChannelOpenMessage(
-        channelType: reliability,
-        reliabilityParameter: reliabilityParameter
-      )
-    )
+  let msg = DataChannelMessage(
+    messageType: Open,
+    openMessage: DataChannelOpenMessage(
+      channelType: reliability, reliabilityParameter: reliabilityParameter
+    ),
+  )
   await stream.sendControlMessage(msg)
   return stream
 
-proc handleData(conn: DataChannelConnection, msg: SctpMessage) {.async: (raises: [CancelledError, WebRtcError]).} =
+proc handleData(
+    conn: DataChannelConnection, msg: SctpMessage
+) {.async: (raises: [CancelledError, WebRtcError]).} =
   let streamId = msg.params.streamId
   trace "handle data message", streamId, ppid = msg.params.protocolId, data = msg.data
 
@@ -180,7 +185,7 @@ proc handleData(conn: DataChannelConnection, msg: SctpMessage) {.async: (raises:
 
 proc handleControl(
     conn: DataChannelConnection, msg: SctpMessage
-  ) {.async: (raises: [CancelledError, WebRtcError]).} =
+) {.async: (raises: [CancelledError, WebRtcError]).} =
   let decoded =
     try:
       Binary.decode(msg.data, DataChannelMessage)
@@ -198,13 +203,15 @@ proc handleControl(
       raise newException(WebRtcError, "DataChannel - Got ACK for unknown StreamID")
   elif decoded.messageType == Open:
     if streamId in conn.streams:
-      raise newException(WebRtcError, "DataChannel - Got open for already existing StreamID")
+      raise newException(
+        WebRtcError, "DataChannel - Got open for already existing StreamID"
+      )
     let stream = DataChannelStream(
       id: streamId,
       conn: conn.conn,
       reliability: decoded.openMessage.channelType,
       reliabilityParameter: decoded.openMessage.reliabilityParameter,
-      receivedData: newAsyncQueue[seq[byte]]()
+      receivedData: newAsyncQueue[seq[byte]](),
     )
 
     conn.streams[streamId] = stream
@@ -221,18 +228,18 @@ proc readLoop(conn: DataChannelConnection) {.async: (raises: [CancelledError]).}
         await conn.handleControl(message)
       else:
         await conn.handleData(message)
-
   except CatchableError as exc:
     discard
 
-proc accept*(conn: DataChannelConnection): Future[DataChannelStream]
-            {.async: (raises: [CancelledError]).} =
+proc accept*(
+    conn: DataChannelConnection
+): Future[DataChannelStream] {.async: (raises: [CancelledError]).} =
   return await conn.incomingStreams.popFirst()
 
 proc new*(_: type DataChannelConnection, conn: SctpConn): DataChannelConnection =
   result = DataChannelConnection(
     conn: conn,
     incomingStreams: newAsyncQueue[DataChannelStream](),
-    streamId: 1'u16 # TODO: Serveur == 1, client == 2
+    streamId: 1'u16, # TODO: Serveur == 1, client == 2
   )
   result.readLoopFut = result.readLoop()
