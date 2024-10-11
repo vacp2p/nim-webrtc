@@ -120,16 +120,15 @@ proc sendControlMessage(
 
   await stream.conn.write(encoded, sendInfo)
 
-proc closeStream*(stream: DataChannelStream) {.async.} =
-  # TODO
-  discard
+proc closeStream*(stream: DataChannelStream) =
+  stream.conn.closeChannel(stream.id)
 
 proc openStream*(
     conn: DataChannelConnection,
     noiseHandshake: bool,
     reliability = Reliable,
     reliabilityParameter: uint32 = 0,
-): Future[DataChannelStream] {.async.} =
+): Future[DataChannelStream] {.async: (raises: [CancelledError, WebRtcError]).} =
   let streamId: uint16 =
     if not noiseHandshake:
       let res = conn.streamId
@@ -140,13 +139,10 @@ proc openStream*(
 
   trace "open stream", streamId
   if reliability in [Reliable, ReliableUnordered] and reliabilityParameter != 0:
-    raise newException(ValueError, "reliabilityParameter should be 0")
+    raise newException(WebRtcError, "DataChannel - openStream: reliability parameter should be 0")
 
   if streamId in conn.streams:
-    raise newException(ValueError, "streamId already used")
-
-  #TODO: we should request more streams when required
-  # https://github.com/sctplab/usrsctp/blob/a0cbf4681474fab1e89d9e9e2d5c3694fce50359/programs/rtcweb.c#L304C16-L304C16
+    raise newException(WebRtcError, "DataChannel - openStream: streamId already used")
 
   var stream = DataChannelStream(
     id: streamId,
