@@ -134,7 +134,8 @@ proc recvCallback*(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
         streamId: message.info.recvv_rcvinfo.rcv_sid,
       )
       if bitand(flags, MSG_NOTIFICATION) != 0:
-        trace "Notification received", length = n
+        let notif = cast[ptr sctp_notification](data)
+        trace "Notification received", notifType = notif.sn_header.sn_type
       else:
         try:
           conn.dataRecv.addLastNoWait(message)
