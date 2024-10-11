@@ -14,7 +14,9 @@ import ./sctp_utils, ../errors, ../dtls/dtls_connection
 logScope:
   topics = "webrtc sctp_connection"
 
-const SctpConnTracker* = "webrtc.sctp.conn"
+const
+  SctpConnTracker* = "webrtc.sctp.conn"
+  IPPROTO_SCTP = 132 # Official IANA number
 
 type
   SctpConnOnClose* = proc() {.raises: [], gcsafe.}
@@ -261,10 +263,59 @@ proc write*(
 ) {.async: (raises: [CancelledError, WebRtcError]).} =
   await self.write(s.toBytes())
 
+type
+  # This object is a workaround, srs_stream_list in usrsctp is an
+  # UncheckedArray, and they're not assignable.
+  sctp_reset_streams_workaround = object
+    srs_assoc_id: sctp_assoc_t
+    srs_flags: uint16
+    srs_number_streams: uint16
+    srs_stream_list: array[1, uint16]
+
+proc closeChannel*(self: SctpConn, streamId: uint16) =
+  ## Resets a specific outgoing SCTP stream identified by
+  ## streamId to close the associated DataChannel.
+  var srs: sctp_reset_streams_workaround
+  let len = sizeof(srs)
+
+  srs.srs_flags = SCTP_STREAM_RESET_OUTGOING
+  srs.srs_number_streams = 1
+  srs.srs_stream_list[0] = streamId
+  let ret = usrsctp_setsockopt(
+    self.sctpSocket,
+    IPPROTO_SCTP,
+    SCTP_RESET_STREAMS,
+    addr srs,
+    len.Socklen
+  )
+  if ret < 0:
+    raise newException(WebRtcError, "SCTP - Close channel failed: " & sctpStrerror())
+
+proc closeAllChannels*(self: SctpConn) =
+  ## Resets all outgoing SCTP streams, effectively closing all
+  ## open DataChannels for the current SCTP connection.
+  var srs: sctp_reset_streams_workaround
+  let len = sizeof(srs) - sizeof(srs.srs_stream_list)
+
+  srs.srs_flags = SCTP_STREAM_RESET_OUTGOING
+  srs.srs_number_streams = 0 # 0 means all channels
+  let ret = usrsctp_setsockopt(
+    self.sctpSocket,
+    IPPROTO_SCTP,
+    SCTP_RESET_STREAMS,
+    addr srs,
+    len.Socklen
+  )
+  if ret < 0:
+    raise newException(WebRtcError, "SCTP - Close all channels failed: " & sctpStrerror())
+
 proc close*(self: SctpConn) {.async: (raises: [CancelledError, WebRtcError]).} =
+  ## Closes the entire SCTP connection by resetting all channels,
+  ## deregistering the address, stopping the read loop, and cleaning up resources.
   if self.state == SctpClosed:
     debug "Try to close SctpConn twice"
     return
+  self.closeAllChannels()
   usrsctp_deregister_address(cast[pointer](self))
   self.usrsctpAwait:
     self.sctpSocket.usrsctp_close()

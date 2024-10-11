@@ -10,7 +10,7 @@
 import tables, bitops, nativesockets, strutils, sequtils
 import usrsctp, chronos, chronicles
 import
-  ./[sctp_connection, sctp_utils], ../errors, ../dtls/[dtls_transport, dtls_connection]
+  ./[sctp_connection, sctp_utils], ../errors, ../dtls/dtls_transport
 
 export chronicles
 
