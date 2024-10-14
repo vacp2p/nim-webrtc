@@ -39,11 +39,11 @@ proc listen*(self: WebRTC) =
 proc connect*(
     self: WebRTC, raddr: TransportAddress
 ): Future[DataChannelConnection] {.async: (raises: [CancelledError, WebRtcError]).} =
-  let sctpConn = await self.sctp.connect(raddr) # TODO: Port?
-  result = DataChannelConnection.new(sctpConn)
+  let sctpConn = await self.sctp.connect(raddr)
+  result = DataChannelConnection.new(sctpConn, false)
 
 proc accept*(
-    w: WebRTC
+    self: WebRTC
 ): Future[DataChannelConnection] {.async: (raises: [CancelledError, WebRtcError]).} =
-  let sctpConn = await w.sctp.accept()
-  result = DataChannelConnection.new(sctpConn)
+  let sctpConn = await self.sctp.accept()
+  result = DataChannelConnection.new(sctpConn, true)

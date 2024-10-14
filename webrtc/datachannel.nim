@@ -236,10 +236,10 @@ proc accept*(
 ): Future[DataChannelStream] {.async: (raises: [CancelledError]).} =
   return await conn.incomingStreams.popFirst()
 
-proc new*(_: type DataChannelConnection, conn: SctpConn): DataChannelConnection =
+proc new*(_: type DataChannelConnection, conn: SctpConn, isServer: bool): DataChannelConnection =
   result = DataChannelConnection(
     conn: conn,
     incomingStreams: newAsyncQueue[DataChannelStream](),
-    streamId: 1'u16, # TODO: Serveur == 1, client == 2
+    streamId: if isServer: 1'u16 else: 2'u16,
   )
   result.readLoopFut = result.readLoop()
