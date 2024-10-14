@@ -108,7 +108,7 @@ proc new*(
   ##
   var self = T(
     udp: udp,
-    laddr: udp.laddr,
+    laddr: udp.localAddress(),
     usernameProvider: usernameProvider,
     usernameChecker: usernameChecker,
     passwordProvider: passwordProvider,
