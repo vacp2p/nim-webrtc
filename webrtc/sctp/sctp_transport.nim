@@ -42,7 +42,7 @@ proc handleAccept(sock: ptr socket, data: pointer, flags: cint) {.cdecl.} =
   # Callback procedure called when a connection is about to be accepted.
   var
     sconn: Sockaddr_conn
-    slen: Socklen = sizeof(Sockaddr_conn).uint32
+    slen: SockLen = sizeof(Sockaddr_conn).uint32
   let
     sctp = cast[Sctp](data)
     sctpSocket =

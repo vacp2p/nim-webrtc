@@ -287,7 +287,7 @@ proc closeChannel*(self: SctpConn, streamId: uint16) =
     IPPROTO_SCTP,
     SCTP_RESET_STREAMS,
     addr srs,
-    len.Socklen
+    len.SockLen
   )
   if ret < 0:
     raise newException(WebRtcError, "SCTP - Close channel failed: " & sctpStrerror())
@@ -305,7 +305,7 @@ proc closeAllChannels*(self: SctpConn) =
     IPPROTO_SCTP,
     SCTP_RESET_STREAMS,
     addr srs,
-    len.Socklen
+    len.SockLen
   )
   if ret < 0:
     raise newException(WebRtcError, "SCTP - Close all channels failed: " & sctpStrerror())
