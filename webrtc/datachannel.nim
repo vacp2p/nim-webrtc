@@ -243,3 +243,9 @@ proc new*(_: type DataChannelConnection, conn: SctpConn, isServer: bool): DataCh
     streamId: if isServer: 1'u16 else: 2'u16,
   )
   result.readLoopFut = result.readLoop()
+
+proc localCertificate*(self: DataChannelConnection): seq[byte] =
+  self.conn.localCertificate()
+
+proc remoteCertificate*(self: DataChannelConnection): seq[byte] =
+  self.conn.remoteCertificate()

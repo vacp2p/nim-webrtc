@@ -327,3 +327,9 @@ proc close*(self: SctpConn) {.async: (raises: [CancelledError, WebRtcError]).} =
   for onCloseProc in self.onClose:
     onCloseProc()
   self.onClose = @[]
+
+proc localCertificate*(self: SctpConn): seq[byte] =
+  self.conn.localCertificate()
+
+proc remoteCertificate*(self: SctpConn): seq[byte] =
+  self.conn.remoteCertificate()
