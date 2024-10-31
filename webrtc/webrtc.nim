@@ -50,3 +50,6 @@ proc accept*(
 
 proc localCertificate*(self: WebRTC): seq[byte] =
   self.dtls.localCertificate()
+
+proc localAddress*(self: WebRTC): TransportAddress =
+  self.udp.laddr
