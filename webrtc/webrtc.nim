@@ -48,5 +48,5 @@ proc accept*(
   let sctpConn = await self.sctp.accept()
   result = DataChannelConnection.new(sctpConn, true)
 
-proc localCertificate(self: WebRTC): seq[byte] =
+proc localCertificate*(self: WebRTC): seq[byte] =
   self.dtls.localCertificate()
