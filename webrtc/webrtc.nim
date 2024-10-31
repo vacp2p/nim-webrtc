@@ -28,10 +28,10 @@ type WebRTC* = ref object
 
 proc new*(T: typedesc[WebRTC], address: TransportAddress): T =
   result = T()
-  result = UdpTransport.new(address)
-  result = Stun.new(result.udp)
-  result = Dtls.new(result.stun)
-  result = Sctp.new(result.dtls)
+  result.udp = UdpTransport.new(address)
+  result.stun = Stun.new(result.udp)
+  result.dtls = Dtls.new(result.stun)
+  result.sctp = Sctp.new(result.dtls)
 
 proc listen*(self: WebRTC) =
   self.sctp.listen()
