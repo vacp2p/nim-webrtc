@@ -47,3 +47,6 @@ proc accept*(
 ): Future[DataChannelConnection] {.async: (raises: [CancelledError, WebRtcError]).} =
   let sctpConn = await self.sctp.accept()
   result = DataChannelConnection.new(sctpConn, true)
+
+proc localCertificate(self: WebRTC): seq[byte] =
+  self.dtls.localCertificate()
