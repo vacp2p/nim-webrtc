@@ -9,7 +9,7 @@
 
 import nativesockets, bitops, sequtils
 import usrsctp, chronos, chronicles, stew/[ptrops, endians2, byteutils]
-import ./sctp_utils, ../errors, ../dtls/dtls_connection
+import ./sctp_utils, ./sctp_logutils, ../errors, ../dtls/dtls_connection
 
 logScope:
   topics = "webrtc sctp_connection"
