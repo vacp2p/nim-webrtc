@@ -32,11 +32,10 @@ proc new*(T: typedesc[WebRTC], address: TransportAddress,
     usernameProvider: StunUsernameProvider = defaultUsernameProvider,
     usernameChecker: StunUsernameChecker = defaultUsernameChecker,
     passwordProvider: StunPasswordProvider = defaultPasswordProvider,
-    rng: ref HmacDrbgContext,
   ): T =
   result = T()
   result.udp = UdpTransport.new(address)
-  result.stun = Stun.new(result.udp, usernameProvider, usernameChecker, passwordProvider, rng)
+  result.stun = Stun.new(result.udp, usernameProvider, usernameChecker, passwordProvider)
   result.dtls = Dtls.new(result.stun)
   result.sctp = Sctp.new(result.dtls)
 
