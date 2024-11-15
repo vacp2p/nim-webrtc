@@ -92,9 +92,9 @@ proc stop*(self: Stun) {.async: (raises: []).} =
   await self.readingLoop.cancelAndWait()
   untrackCounter(StunTransportTracker)
 
-proc defaultUsernameProvider(): string = ""
-proc defaultUsernameChecker(username: seq[byte]): bool = true
-proc defaultPasswordProvider(username: seq[byte]): seq[byte] = @[]
+proc defaultUsernameProvider*(): string = ""
+proc defaultUsernameChecker*(username: seq[byte]): bool = true
+proc defaultPasswordProvider*(username: seq[byte]): seq[byte] = @[]
 
 proc new*(
     T: type Stun,

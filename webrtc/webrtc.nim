@@ -7,7 +7,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import chronos, chronicles
+import bearssl, chronos, chronicles
 
 import udp_transport
 import stun/stun_transport
@@ -15,6 +15,8 @@ import dtls/dtls_transport
 import sctp/sctp_transport
 import datachannel
 import errors
+
+from stun/stun_connection import StunUsernameProvider, StunUsernameChecker, StunPasswordProvider
 
 logScope:
   topics = "webrtc"
@@ -26,10 +28,15 @@ type WebRTC* = ref object
   sctp: Sctp
   port: int
 
-proc new*(T: typedesc[WebRTC], address: TransportAddress): T =
+proc new*(T: typedesc[WebRTC], address: TransportAddress,
+    usernameProvider: StunUsernameProvider = defaultUsernameProvider,
+    usernameChecker: StunUsernameChecker = defaultUsernameChecker,
+    passwordProvider: StunPasswordProvider = defaultPasswordProvider,
+    rng: ref HmacDrbgContext,
+  ): T =
   result = T()
   result.udp = UdpTransport.new(address)
-  result.stun = Stun.new(result.udp)
+  result.stun = Stun.new(result.udp, usernameProvider, usernameChecker, passwordProvider, rng)
   result.dtls = Dtls.new(result.stun)
   result.sctp = Sctp.new(result.dtls)
 
