@@ -110,7 +110,7 @@ proc encode*(T: typedesc[UsernameAttribute], username: string): RawStunAttribute
   return UsernameAttribute.encode(username.toBytes())
 
 proc decode*(T: typedesc[UsernameAttribute], rawAttr: RawStunAttribute): T =
-  return Binary.decode(rawAttr.value, T)
+  result.username = rawAttr.value
 
 # Error Code
 # https://datatracker.ietf.org/doc/html/rfc5389#section-15.6
